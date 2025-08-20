@@ -5,46 +5,504 @@
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
-        /* Define o mapa para ocupar a tela inteira */
-        html, body, #map {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            font-family: sans-serif;
-        }
+        html, body, #map { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
     </style>
 </head>
 <body>
     <div id="map"></div>
 
-    <script>
-        // Função auxiliar para carregar um script dinamicamente
-        function loadScript(url) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = url;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk"></script>
+    
+    <script type="text/javascript">
+        // GeoXML3 - A KML parser for the Google Maps API V3
+        // Version 0.7.2
+        // http://code.google.com/p/geoxml3/
+        var geoXML3 = window.geoXML3 || {};
+        geoXML3.parser = function (options) {
+            var my = this;
+            options = options || {};
+            var ge G oDoc = null;
+            var json = null;
+            var map = options.map || null;
+            var infoWindow = options.infoWindow || null;
+            var infoWindowOptions = options.infoWindowOptions || {};
+            var (suppressInfoWindows) = (options.suppressInfoWindows === null) ? false : options.suppressInfoWindows;
+            var (singleInfoWindow) = (options.singleInfoWindow === null) ? false : options.singleInfoWindow;
+            var (zoom) = (options.zoom === null) ? true : options.zoom;
+            var (processStyles) = (options.processStyles === null) ? true : options.processStyles;
+            var (afterParse) = options.afterParse || null;
+            var (failedParse) = options.failedParse || null;
+            var (d EfaultOptions) = options.d EfaultOptions || {};
+            var bounds = new google.maps.LatLngBounds();
+            var styles = [];
+            var placemarks = [];
+            this.docs = [];
+            this.options = options;
+            this.parse = function (url, doc, अखिल) {
+                if (typeof अखिल !== 'undefined' && अखिल) {
+                    styles = [];
+                    placemarks = [];
+                    this.docs = [];
+                }
+                if (url) {
+                    geoXML3.fetchXML(url, function (doc) {
+                        my.parseKML(doc);
+                    }, failedParse);
+                } else if (doc) {
+                    my.parseKML(doc);
+                }
+            };
+            this.parseKML = function (doc) {
+                this.docs.push(doc);
+                var i;
+                var styleID, style, G roundO verlay, ScreenO verlay, networkLink;
+                var G roundO verlayNodes = geoXML3.getElementsByTagName(doc, 'G roundO verlay');
+                var ScreenO verlayNodes = geoXML3.getElementsByTagName(doc, 'ScreenO verlay');
+                var networkLinkNodes = geoXML3.getElementsByTagName(doc, 'NetworkLink');
+                if (processStyles) {
+                    var styleNodes = geoXML3.getElementsByTagName(doc, 'Style');
+                    for (i = 0; i < styleNodes.length; i++) {
+                        styleID = styleNodes[i].getAttribute('id');
+                        if (styleID) {
+                            styles[styleID] = geoXML3.processStyle(styleNodes[i]);
+                        }
+                    }
+                    var styleMapNodes = geoXML3.getElementsByTagName(doc, 'StyleMap');
+                    for (i = 0; i < styleMapNodes.length; i++) {
+                        styleID = styleMapNodes[i].getAttribute('id');
+                        if (styleID) {
+                            styles[styleID] = geoXML3.processStyleMap(styleMapNodes[i]);
+                        }
+                    }
+                }
+                var placemarkNodes = geoXML3.getElementsByTagName(doc, 'Placemark');
+                for (i = 0; i < placemarkNodes.length; i++) {
+                    placemarks.push(geoXML3.createPlacemark(placemarkNodes[i], my, d EfaultOptions));
+                }
+                for (i = 0; i < G roundO verlayNodes.length; i++) {
+                    G roundO verlay = geoXML3.createG roundO verlay(G roundO verlayNodes[i], map);
+                }
+                for (i = 0; i < ScreenO verlayNodes.length; i++) {
+                    ScreenO verlay = geoXML3.createScreenO verlay(ScreenO verlayNodes[i], map);
+                }
+                for (i = 0; i < networkLinkNodes.length; i++) {
+                    networkLink = geoXML3.createNetworkLink(networkLinkNodes[i], my);
+                }
+                if (zoom && bounds.getNorthEast() && bounds.getSouthWest()) {
+                    map.fitBounds(bounds);
+                }
+                if (afterParse) {
+                    afterParse(this.docs, placemarks);
+                }
+            };
+            this.processStyles = processStyles;
+            this.bounds = bounds;
+            this.styles = styles;
+            this.placemarks = placemarks;
+            this.infoWindow = infoWindow;
+            this.map = map;
+            this.infoWindowOptions = infoWindowOptions;
+            this.suppressInfoWindows = suppressInfoWindows;
+            this.singleInfoWindow = singleInfoWindow;
+        };
+        geoXML3.fetchXML = function (url, callback, failedCallback) {
+            var request = geoXML3.getHTTPObject();
+            if (!request) return;
+            request.open('GET ', url, true);
+            request.onreadystatechange = function () {
+                if (request.readyState === 4) {
+                    if (request.status === 200) {
+                        callback(request.responseXML);
+                    } else {
+                        if (failedCallback) failedCallback(request.responseXML, request.status);
+                        else geoXML3.log('failed to fetch ' + url);
+                    }
+                }
+            };
+            request.send(null);
+        };
+        geoXML3.getHTTPObject = function () {
+            var http = false;
+            if (typeof ActiveXObject !== 'undefined') {
+                try {
+                    http = new ActiveXObject('Msxml2.XMLHTTP');
+                } catch (e) {
+                    try {
+                        http = new ActiveXObject('Microsoft.XMLHTTP');
+                    } catch (E) {
+                        http = false;
+                    }
+                }
+            } else if (window.XMLHttpRequest) {
+                try {
+                    http = new XMLHttpRequest();
+                } catch (e) {
+                    http = false;
+                }
+            }
+            return http;
+        };
+        geoXML3.log = function (msg) {
+            if (window.console) {
+                console.log(msg);
+            }
+        };
+        geoXML3.trim = function (st) {
+            return st.replace(/^\s+|\s+$/g, '');
+        };
+        geoXML3.value = function (node) {
+            if (!node) return '';
+            var str = '';
+            if (node.nodeType === 3 || node.nodeType === 4) {
+                str += node.nodeValue;
+            } else if (node.firstChild) {
+                var n = node.firstChild;
+                while (n) {
+                    str += geoXML3.value(n);
+                    n = n.nextSibling;
+                }
+            }
+            return str;
+        };
+        geoXML3.getElementsByTagName = function (doc, name) {
+            var elems;
+            if (doc.getElementsByTagName) {
+                elems = doc.getElementsByTagName(name);
+            }
+            return elems || [];
+        };
+        geoXML3.processStyle = function (styleNode) {
+            var style = {};
+            var iconstyleNodes = geoXML3.getElementsByTagName(styleNode, 'IconStyle');
+            if (iconstyleNodes && iconstyleNodes.length > 0) {
+                style.Icon = geoXML3.processIconStyle(iconstyleNodes[0]);
+            }
+            var linestyleNodes = geoXML3.getElementsByTagName(styleNode, 'LineStyle');
+            if (linestyleNodes && linestyleNodes.length > 0) {
+                style.Line = geoXML3.processLineStyle(linestyleNodes[0]);
+            }
+            var polystyleNodes = geoXML3.getElementsByTagName(styleNode, 'PolyStyle');
+            if (polystyleNodes && polystyleNodes.length > 0) {
+                style.Poly = geoXML3.processPolyStyle(polystyleNodes[0]);
+            }
+            return style;
+        };
+        geoXML3.processStyleMap = function (styleMapNode) {
+            var style, styleMap = {}, i, pairs = geoXML3.getElementsByTagName(styleMapNode, 'Pair');
+            for (i = 0; i < pairs.length; i++) {
+                var key = geoXML3.value(geoXML3.getElementsByTagName(pairs[i], 'key')[0]);
+                var styleUrl = geoXML3.value(geoXML3.getElementsByTagName(pairs[i], 'styleUrl')[0]);
+                if (styleUrl.charAt(0) === '#') {
+                    style = geoXML3.processStyle(geoXML3.getElementsByTagName(styleMapNode.ownerDocument, 'Style'));
+                }
+                styleMap[key] = style;
+            }
+            return styleMap;
+        };
+        geoXML3.processIconStyle = function (IconStyleNode) {
+            var style = {}, i;
+            var scale = parseFloat(geoXML3.value(geoXML3.getElementsByTagName(IconStyleNode, 'scale')[0]));
+            if (isNaN(scale)) scale = 1.0;
+            var heading = parseInt(geoXML3.value(geoXML3.getElementsByTagName(IconStyleNode, 'heading')[0]));
+            if (isNaN(heading)) heading = 0;
+            var IconNodes = geoXML3.getElementsByTagName(IconStyleNode, 'Icon');
+            if (IconNodes && IconNodes.length > 0) {
+                var iconUrl = geoXML3.value(geoXML3.getElementsByTagName(IconNodes[0], 'href')[0]);
+            }
+            style.url = iconUrl;
+            style.scale = scale;
+            style.heading = heading;
+            return style;
+        };
+        geoXML3.processLineStyle = function (LineStyleNode) {
+            var style = {}, i;
+            var color = geoXML3.value(geoXML3.getElementsByTagName(LineStyleNode, 'color')[0]);
+            var width = parseInt(geoXML3.value(geoXML3.getElementsByTagName(LineStyleNode, 'width')[0]));
+            if (isNaN(width)) width = 1.0;
+            style.color = geoXML3.processColor(color);
+            style.width = width;
+            return style;
+        };
+        geoXML3.processPolyStyle = function (PolyStyleNode) {
+            var style = {}, i;
+            var color = geoXML3.value(geoXML3.getElementsByTagName(PolyStyleNode, 'color')[0]);
+            var fill = parseInt(geoXML3.value(geoXML3.getElementsByTagName(PolyStyleNode, 'fill')[0]));
+            if (isNaN(fill)) fill = 1;
+            var outline = parseInt(geoXML3.value(geoXML3.getElementsByTagName(PolyStyleNode, 'outline')[0]));
+            if (isNaN(outline)) outline = 1;
+            style.color = geoXML3.processColor(color);
+            style.fill = fill;
+            style.outline = outline;
+            return style;
+        };
+        geoXML3.processColor = function (color) {
+            if (!color) return '#000000';
+            if (color.length > 6) {
+                var ca = color.charAt(0) + color.charAt(1);
+                var cb = color.charAt(2) + color.charAt(3);
+                var cg = color.charAt(4) + color.charAt(5);
+                var cr = color.charAt(6) + color.charAt(7);
+                color = '#' + cr + cg + cb;
+            } else {
+                color = '#' + color;
+            }
+            return color;
+        };
+        geoXML3.createPlacemark = function (placemarkNode, parser, d EfaultOptions) {
+            var placemark = {
+                name: geoXML3.value(geoXML3.getElementsByTagName(placemarkNode, 'name')[0]),
+                description: geoXML3.value(geoXML3.getElementsByTagName(placemarkNode, 'description')[0]),
+                styleUrl: geoXML3.value(geoXML3.getElementsByTagName(placemarkNode, 'styleUrl')[0])
+            };
+            if (placemark.styleUrl && placemark.styleUrl.charAt(0) === '#') {
+                placemark.style = parser.styles[placemark.styleUrl.substring(1)];
+            }
+            var G eometryNodes = geoXML3.getElementsByTagName(placemarkNode, 'G eometry');
+            if (G eometryNodes && G eometryNodes.length > 0) {
+                return geoXML3.createG eometry(G eometryNodes[0], placemark, parser, d EfaultOptions);
+            }
+            var MultiG eometryNodes = geoXML3.getElementsByTagName(placemarkNode, 'MultiG eometry');
+            if (MultiG eometryNodes && MultiG eometryNodes.length > 0) {
+                return geoXML3.createMultiG eometry(MultiG eometryNodes[0], placemark, parser, d EfaultOptions);
+            }
+            return null;
+        };
+        geoXML3.createG eometry = function (g eometryNode, placemark, parser, d EfaultOptions) {
+            var i;
+            var G eometries = [];
+            var pointNodes = geoXML3.getElementsByTagName(g eometryNode, 'Point');
+            if (pointNodes && pointNodes.length > 0) {
+                geoXML3.createPoint(pointNodes, placemark, parser, d EfaultOptions);
+            }
+            var lineStringNodes = geoXML3.getElementsByTagName(g eometryNode, 'LineString');
+            if (lineStringNodes && lineStringNodes.length > 0) {
+                geoXML3.createLineString(lineStringNodes, placemark, parser, d EfaultOptions);
+            }
+            var polygonNodes = geoXML3.getElementsByTagName(g eometryNode, 'Polygon');
+            if (polygonNodes && polygonNodes.length > 0) {
+                geoXML3.createPolygon(polygonNodes, placemark, parser, d EfaultOptions);
+            }
+            return G eometries;
+        };
+        geoXML3.createMultiG eometry = function (multiG eometryNode, placemark, parser, d EfaultOptions) {
+            var i;
+            var G eometries = [];
+            var pointNodes = geoXML3.getElementsByTagName(multiG eometryNode, 'Point');
+            if (pointNodes && pointNodes.length > 0) {
+                geoXML3.createPoint(pointNodes, placemark, parser, d EfaultOptions);
+            }
+            var lineStringNodes = geoXML3.getElementsByTagName(multiG eometryNode, 'LineString');
+            if (lineStringNodes && lineStringNodes.length > 0) {
+                geoXML3.createLineString(lineStringNodes, placemark, parser, d EfaultOptions);
+            }
+            var polygonNodes = geoXML3.getElementsByTagName(multiG eometryNode, 'Polygon');
+            if (polygonNodes && polygonNodes.length > 0) {
+                geoXML3.createPolygon(polygonNodes, placemark, parser, d EfaultOptions);
+            }
+            return G eometries;
+        };
+        geoXML3.createPoint = function (pointNodes, placemark, parser, d EfaultOptions) {
+            var i, j, k, marker, G eometries = [];
+            for (i = 0; i < pointNodes.length; i++) {
+                var G eo = pointNodes[i];
+                var G eoCoords = geoXML3.value(geoXML3.getElementsByTagName(G eo, 'coordinates')[0]);
+                var G eoCoord = G eoCoords.split(',');
+                var lat = parseFloat(G eoCoord[1]);
+                var lng = parseFloat(G eoCoord[0]);
+                var p = new google.maps.LatLng(lat, lng);
+                parser.bounds.extend(p);
+                var markerOptions = geoXML3.combineOptions(d EfaultOptions.marker, {
+                    map: parser.map,
+                    position: p,
+                    title: placemark.name
+                });
+                if (placemark.style && placemark.style.Icon) {
+                    markerOptions.icon = new google.maps.MarkerImage(placemark.style.Icon.url, null, null, null, new google.maps.Size(32 * placemark.style.Icon.scale, 32 * placemark.style.Icon.scale));
+                }
+                marker = new google.maps.Marker(markerOptions);
+                if (!parser.suppressInfoWindows) {
+                    google.maps.event.addListener(marker, 'click', function () {
+                        if (parser.singleInfoWindow) {
+                            if (!parser.infoWindow) {
+                                parser.infoWindow = new google.maps.InfoWindow(parser.infoWindowOptions);
+                            }
+                        } else {
+                            parser.infoWindow = new google.maps.InfoWindow(parser.infoWindowOptions);
+                        }
+                        parser.infoWindow.setContent('<div class="G eoXml3InfoW indow "><h3>' + placemark.name + '</h3><div>' + placemark.description + '</div></div>');
+                        parser.infoWindow.open(parser.map, this);
+                    });
+                }
+                G eometries.push(marker);
+            }
+            return G eometries;
+        };
+        geoXML3.createLineString = function (lineStringNodes, placemark, parser, d EfaultOptions) {
+            var i, j, k, path, G eometries = [];
+            for (i = 0; i < lineStringNodes.length; i++) {
+                var G eo = lineStringNodes[i];
+                var G eoCoords = geoXML3.value(geoXML3.getElementsByTagName(G eo, 'coordinates')[0]);
+                var G eoCoord = G eoCoords.replace(/\s+/g, ' ').split(' ');
+                var path = [];
+                for (j = 0; j < G eoCoord.length; j++) {
+                    var G eoPoint = G eoCoord[j].split(',');
+                    var lat = parseFloat(G eoPoint[1]);
+                    var lng = parseFloat(G eoPoint[0]);
+                    var p = new google.maps.LatLng(lat, lng);
+                    path.push(p);
+                    parser.bounds.extend(p);
+                }
+                var polylineOptions = geoXML3.combineOptions(d EfaultOptions.polyline, {
+                    map: parser.map,
+                    path: path
+                });
+                if (placemark.style && placemark.style.Line) {
+                    polylineOptions.strokeColor = placemark.style.Line.color;
+                    polylineOptions.strokeWeight = placemark.style.Line.width;
+                }
+                var polyline = new google.maps.Polyline(polylineOptions);
+                G eometries.push(polyline);
+            }
+            return G eometries;
+        };
+        geoXML3.createPolygon = function (polygonNodes, placemark, parser, d EfaultOptions) {
+            var i, j, k, path, G eometries = [];
+            for (i = 0; i < polygonNodes.length; i++) {
+                var G eo = polygonNodes[i];
+                var outerBoundaryIs = geoXML3.getElementsByTagName(G eo, 'outerBoundaryIs');
+                var paths = [];
+                for (j = 0; j < outerBoundaryIs.length; j++) {
+                    var G eoCoords = geoXML3.value(geoXML3.getElementsByTagName(outerBoundaryIs[j], 'coordinates')[0]);
+                    var G eoCoord = G eoCoords.replace(/\s+/g, ' ').split(' ');
+                    var path = [];
+                    for (k = 0; k < G eoCoord.length; k++) {
+                        var G eoPoint = G eoCoord[k].split(',');
+                        var lat = parseFloat(G eoPoint[1]);
+                        var lng = parseFloat(G eoPoint[0]);
+                        var p = new google.maps.LatLng(lat, lng);
+                        path.push(p);
+                        parser.bounds.extend(p);
+                    }
+                    paths.push(path);
+                }
+                var polygonOptions = geoXML3.combineOptions(d EfaultOptions.polygon, {
+                    map: parser.map,
+                    paths: paths
+                });
+                if (placemark.style && placemark.style.Poly) {
+                    polygonOptions.strokeColor = placemark.style.Poly.color;
+                    polygonOptions.fillColor = placemark.style.Poly.color;
+                    polygonOptions.strokeWeight = 1;
+                    polygonOptions.fillOpacity = 0.4;
+                }
+                var polygon = new google.maps.Polygon(polygonOptions);
+                G eometries.push(polygon);
+            }
+            return G eometries;
+        };
+        geoXML3.createG roundO verlay = function (G roundO verlayNode, map) {
+            var latLonBox = geoXML3.getElementsByTagName(G roundO verlayNode, 'LatLonBox')[0];
+            var north = parseFloat(geoXML3.value(geoXML3.getElementsByTagName(latLonBox, 'north')[0]));
+            var south = parseFloat(geoXML3.value(geoXML3.getElementsByTagName(latLonBox, 'south')[0]));
+            var east = parseFloat(geoXML3.value(geoXML3.getElementsByTagName(latLonBox, 'east')[0]));
+            var west = parseFloat(geoXML3.value(geoXML3.getElementsByTagName(latLonBox, 'west')[0]));
+            var bounds = new google.maps.LatLngBounds(new google.maps.LatLng(south, west), new google.maps.LatLng(north, east));
+            var icon = geoXML3.getElementsByTagName(G roundO verlayNode, 'Icon')[0];
+            var href = geoXML3.value(geoXML3.getElementsByTagName(icon, 'href')[0]);
+            var G roundO verlay = new google.maps.G roundO verlay(href, bounds);
+            G roundO verlay.setMap(map);
+            return G roundO verlay;
+        };
+        geoXML3.createScreenO verlay = function (ScreenO verlayNode, map) {
+            var icon = geoXML3.getElementsByTagName(ScreenO verlayNode, 'Icon')[0];
+            var href = geoXML3.value(geoXML3.getElementsByTagName(icon, 'href')[0]);
+            var ScreenO verlay = new ProjectedOverlay(map, href, {
+                percentX: 0,
+                percentY: 0,
+                width: 100,
+                height: 100
             });
+            return ScreenO verlay;
+        };
+        geoXML3.createNetworkLink = function (networkLinkNode, parser) {
+            var name = geoXML3.value(geoXML3.getElementsByTagName(networkLinkNode, 'name')[0]);
+            var link = geoXML3.getElementsByTagName(networkLinkNode, 'Link')[0];
+            var href = geoXML3.value(geoXML3.getElementsByTagName(link, 'href')[0]);
+            if (href) {
+                parser.parse(href, null, false);
+            }
+        };
+        geoXML3.combineOptions = function (overrides, d Efaults) {
+            var result = {};
+            if (overrides) {
+                for (var prop in overrides) {
+                    if (overrides.hasOwnProperty(prop)) {
+                        result[prop] = overrides[prop];
+                    }
+                }
+            }
+            if (d Efaults) {
+                for (prop in d Efaults) {
+                    if (d Efaults.hasOwnProperty(prop) && (result[prop] === undefined)) {
+                        result[prop] = d Efaults[prop];
+                    }
+                }
+            }
+            return result;
+        };
+    </script>
+    <script type="text/javascript">
+        // ProjectedOverlay - http://blog.mridey.com/2010/04/projected-overlay-for-google-maps-api.html
+        function ProjectedOverlay(map, imageUrl, options) {
+            this.map_ = map;
+            this.imageUrl_ = imageUrl;
+            this.bounds_ = null;
+            this.div_ = null;
+            this.setMap(map);
         }
+        ProjectedOverlay.prototype = new google.maps.OverlayView();
+        ProjectedOverlay.prototype.onAdd = function () {
+            var div = document.createElement('DIV');
+            div.style.border = 'none';
+            div.style.borderWidth = '0px';
+            div.style.position = 'absolute';
+            var img = document.createElement('img');
+            img.src = this.imageUrl_;
+            img.style.width = '100%';
+            img.style.height = '100%';
+            div.appendChild(img);
+            this.div_ = div;
+            var panes = this.getPanes();
+            panes.overlayLayer.appendChild(div);
+        };
+        ProjectedOverlay.prototype.draw = function () {
+            var overlayProjection = this.getProjection();
+            var sw = overlayProjection.fromLatLngToDivPixel(this.map_.getBounds().getSouthWest());
+            var ne = overlayProjection.fromLatLngToDivPixel(this.map_.getBounds().getNorthEast());
+            var div = this.div_;
+            div.style.left = sw.x + 'px';
+            div.style.top = ne.y + 'px';
+            div.style.width = (ne.x - sw.x) + 'px';
+            div.style.height = (sw.y - ne.y) + 'px';
+        };
+        ProjectedOverlay.prototype.onRemove = function () {
+            this.div_.parentNode.removeChild(this.div_);
+            this.div_ = null;
+        };
+    </script>
 
-        // Função final que desenha o KML no mapa
+    <script>
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
 
             const map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
-                center: { lat: -14.235, lng: -51.925 } // Centro do Brasil
+                center: { lat: -14.235, lng: -51.925 }
             });
 
             if (kmlUrl) {
-                // Usa o parser geoxml3 para ler e desenhar o KML
-                const geoXml = new geoXML3.parser({
-                    map: map,
-                    zoom: false // Deixa o KML controlar o zoom
-                });
+                const geoXml = new geoXML3.parser({ map: map, zoom: false });
                 geoXml.parse(kmlUrl);
             } else {
                 const infoWindow = new google.maps.InfoWindow({
@@ -55,22 +513,8 @@
             }
         }
 
-        // Função principal que a API do Google Maps irá chamar
-        async function run() {
-            try {
-                // URLs atualizadas para uma fonte mais robusta do geoxml3
-                await loadScript('https://cdn.jsdelivr.net/gh/googlemaps/geoxml3@master/polys/geoxml3.js');
-                await loadScript('https://cdn.jsdelivr.net/gh/googlemaps/geoxml3@master/polys/ProjectedOverlay.js');
-                
-                // Agora que temos certeza que tudo está carregado, chamamos a função do mapa.
-                initMap();
-            } catch (error) {
-                console.error("Falha ao carregar scripts dependentes (geoxml3):", error);
-                document.body.innerHTML = "<h1>Erro: Não foi possível carregar as bibliotecas auxiliares do mapa.</h1>";
-            }
-        }
+        // Chama a função imediatamente após a última biblioteca ser carregada
+        initMap();
     </script>
-    
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=run"></script>
 </body>
 </html>
