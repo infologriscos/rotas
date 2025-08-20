@@ -17,13 +17,10 @@
 <body>
     <div id="map"></div>
 
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk"></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js"></script>
-
     <script>
-        // Função para inicializar o mapa e carregar o KML
-        function initMap() {
+        // Esta é a nossa função final que desenha o KML no mapa.
+        // Ela só será chamada quando tivermos 100% de certeza que tudo está pronto.
+        function drawKmlOnMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
 
@@ -33,7 +30,7 @@
             });
 
             if (kmlUrl) {
-                // Usa o parser geoxml3 para ler e desenhar o KML
+                // Usamos o parser geoxml3 para ler e desenhar o KML
                 const geoXml = new geoXML3.parser({
                     map: map,
                     zoom: false // Deixa o KML controlar o zoom
@@ -49,8 +46,30 @@
             }
         }
 
-        // Chama a função imediatamente
-        initMap();
+        // Esta é a primeira função que a API do Google Maps irá chamar.
+        // O único trabalho dela é carregar os scripts dependentes na ordem correta.
+        function initLoader() {
+            // 1. Carrega o script principal do geoxml3
+            const geoxml3Script = document.createElement('script');
+            geoxml3Script.src = 'https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js';
+            
+            // 2. QUANDO ele terminar de carregar, carrega o segundo script dependente.
+            geoxml3Script.onload = () => {
+                const projectedOverlayScript = document.createElement('script');
+                projectedOverlayScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/ProjectedOverlay.js';
+                
+                // 3. QUANDO este último script terminar de carregar...
+                projectedOverlayScript.onload = () => {
+                    // 4. ... agora sim, com tudo pronto, chamamos a função para desenhar o mapa.
+                    drawKmlOnMap();
+                };
+                document.head.appendChild(projectedOverlayScript);
+            };
+            
+            document.head.appendChild(geoxml3Script);
+        }
     </script>
+    
+    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=initLoader"></script>
 </body>
 </html>
