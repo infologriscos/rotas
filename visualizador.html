@@ -5,7 +5,6 @@
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
-        /* Define o mapa para ocupar a tela inteira */
         html, body, #map {
             height: 100%;
             margin: 0;
@@ -17,27 +16,27 @@
 <body>
     <div id="map"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/ProjectedOverlay.js"></script>
+
     <script>
         function initMap() {
-            // Pega os parâmetros da URL da página (ex: ...?kml=https://link/para/o/arquivo.kml)
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
 
-            // Cria o mapa, centralizado no Brasil por padrão
             const map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
                 center: { lat: -14.235, lng: -51.925 }
             });
 
-            // Se um link de KML foi encontrado na URL, cria a camada e a adiciona ao mapa
             if (kmlUrl) {
-                const kmlLayer = new google.maps.KmlLayer({
-                    url: kmlUrl, // A URL pública do seu KML
+                // Em vez de usar a KmlLayer nativa, usamos o parser geoxml3
+                const geoXml = new geoXML3.parser({
                     map: map,
-                    preserveViewport: false // Faz o mapa dar zoom e centralizar automaticamente no conteúdo do KML
+                    zoom: false // Desativamos o zoom automático do geoxml3 para que o KML controle o zoom
                 });
+                geoXml.parse(kmlUrl);
             } else {
-                // Se nenhum KML for fornecido na URL, mostra uma mensagem de erro no centro do mapa
                 const infoWindow = new google.maps.InfoWindow({
                     content: '<h1>Erro: Nenhuma URL de KML foi fornecida.</h1>',
                     position: map.getCenter()
@@ -47,6 +46,6 @@
         }
     </script>
     
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&libraries&callback=initMap"></script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_DE_API_AQUI&callback=initMap"></script>
 </body>
 </html>
