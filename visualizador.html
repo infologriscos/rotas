@@ -19,7 +19,6 @@
 
     <script>
         // Função auxiliar para carregar um script dinamicamente
-        // e nos avisar quando ele terminar
         function loadScript(url) {
             return new Promise((resolve, reject) => {
                 const script = document.createElement('script');
@@ -30,7 +29,7 @@
             });
         }
 
-        // Esta é a função final que desenha o KML no mapa.
+        // Função final que desenha o KML no mapa
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
@@ -48,7 +47,6 @@
                 });
                 geoXml.parse(kmlUrl);
             } else {
-                // Se nenhum KML for fornecido, mostra uma mensagem de erro
                 const infoWindow = new google.maps.InfoWindow({
                     content: '<h1>Erro: Nenhuma URL de KML foi fornecida.</h1>',
                     position: map.getCenter()
@@ -57,16 +55,14 @@
             }
         }
 
-        // Esta é a função principal que a API do Google Maps irá chamar.
+        // Função principal que a API do Google Maps irá chamar
         async function run() {
             try {
-                // Espera carregar o script principal do geoxml3
-                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js');
-                // Espera carregar o script secundário do geoxml3
-                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/ProjectedOverlay.js');
+                // URLs atualizadas para uma fonte mais robusta do geoxml3
+                await loadScript('https://cdn.jsdelivr.net/gh/googlemaps/geoxml3@master/polys/geoxml3.js');
+                await loadScript('https://cdn.jsdelivr.net/gh/googlemaps/geoxml3@master/polys/ProjectedOverlay.js');
                 
-                // Agora que temos certeza que tudo está carregado na ordem certa,
-                // finalmente chamamos a função para desenhar o mapa.
+                // Agora que temos certeza que tudo está carregado, chamamos a função do mapa.
                 initMap();
             } catch (error) {
                 console.error("Falha ao carregar scripts dependentes (geoxml3):", error);
@@ -75,6 +71,6 @@
         }
     </script>
     
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=run"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_DE_API_AQUI&callback=run"></script>
 </body>
 </html>
