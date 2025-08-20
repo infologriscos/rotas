@@ -17,19 +17,12 @@
 <body>
     <div id="map"></div>
 
-    <script>
-        // Função auxiliar para carregar um script dinamicamente
-        function loadScript(url) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = url;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
+    <script src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_DE_API_AQUI"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/ProjectedOverlay.js"></script>
 
-        // Função final que desenha o KML no mapa
+    <script>
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
@@ -40,7 +33,6 @@
             });
 
             if (kmlUrl) {
-                // Usa o parser geoxml3 para ler e desenhar o KML
                 const geoXml = new geoXML3.parser({
                     map: map,
                     zoom: false // Deixa o KML controlar o zoom
@@ -55,22 +47,8 @@
             }
         }
 
-        // Função principal que a API do Google Maps irá chamar
-        async function run() {
-            try {
-                // URLs atualizadas para uma fonte mais robusta do geoxml3
-                await loadScript('https://cdn.jsdelivr.net/gh/googlemaps/geoxml3@master/polys/geoxml3.js');
-                await loadScript('https://cdn.jsdelivr.net/gh/googlemaps/geoxml3@master/polys/ProjectedOverlay.js');
-                
-                // Agora que temos certeza que tudo está carregado, chamamos a função do mapa.
-                initMap();
-            } catch (error) {
-                console.error("Falha ao carregar scripts dependentes (geoxml3):", error);
-                document.body.innerHTML = "<h1>Erro: Não foi possível carregar as bibliotecas auxiliares do mapa.</h1>";
-            }
-        }
+        // Chama a função imediatamente após a última biblioteca ser carregada
+        initMap();
     </script>
-    
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=run"></script>
 </body>
 </html>
