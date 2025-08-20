@@ -17,11 +17,11 @@
 <body>
     <div id="map"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/ProjectedOverlay.js"></script>
-
     <script>
-        function initMap() {
+        // Esta é a nossa função final que desenha o KML no mapa.
+        // Ela só será chamada quando tivermos 100% de certeza que tanto a API do Google
+        // quanto a biblioteca geoxml3 já foram carregadas.
+        function drawKmlOnMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
 
@@ -31,12 +31,14 @@
             });
 
             if (kmlUrl) {
+                // Usamos o parser geoxml3 para ler e desenhar o KML
                 const geoXml = new geoXML3.parser({
                     map: map,
                     zoom: false
                 });
                 geoXml.parse(kmlUrl);
             } else {
+                // Se nenhum KML for fornecido, mostra uma mensagem de erro
                 const infoWindow = new google.maps.InfoWindow({
                     content: '<h1>Erro: Nenhuma URL de KML foi fornecida.</h1>',
                     position: map.getCenter()
@@ -44,13 +46,24 @@
                 infoWindow.open(map);
             }
         }
-        
-        // Mantemos a função run, mas ela será chamada pelo callback do Google Maps
-        function run() {
-            initMap();
+
+        // Esta é a primeira função que a API do Google Maps irá chamar.
+        function initLoader() {
+            // 1. Criamos um elemento <script> para carregar a biblioteca geoxml3
+            const geoxml3Script = document.createElement('script');
+            geoxml3Script.src = 'https://cdnjs.cloudflare.com/ajax/libs/geoxml3/0.7.2/geoxml3.js';
+            
+            // 2. Definimos o que fazer QUANDO a geoxml3 terminar de carregar
+            geoxml3Script.onload = () => {
+                // 3. Agora que está tudo pronto, chamamos a função final para desenhar o mapa
+                drawKmlOnMap();
+            };
+
+            // 4. Adicionamos o script à página para iniciar o download
+            document.head.appendChild(geoxml3Script);
         }
     </script>
     
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=initMap"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=initLoader"></script>
 </body>
 </html>
