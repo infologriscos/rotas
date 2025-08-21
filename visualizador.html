@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Visualizador de KML Completo</title>
+    <title>Visualizador de KML com Ícones Padrão</title>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
@@ -65,6 +65,27 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body>
@@ -74,15 +95,14 @@
         <h3>Informações</h3>
         <div id="info-content"></div>
         <button id="open-in-maps" class="hidden">Abrir no Google Maps</button>
-        <p id="maps-note" class="hidden" style="font-size: 12px; margin-top: 10px;">
-            Nota: Os ícones personalizados podem não aparecer no aplicativo do Google Maps.
-        </p>
     </div>
+    <div id="legend" class="hidden"></div>
 
     <script>
         // Variáveis globais para armazenar dados da rota
         let routePoints = [];
         let markerPoints = [];
+        let map;
         
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -93,7 +113,7 @@
                 return;
             }
 
-            const map = new google.maps.Map(document.getElementById('map'), {
+            map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
                 center: { lat: -14.235, lng: -51.925 }, // Centro do Brasil
                 mapTypeId: google.maps.MapTypeId.ROADMAP
@@ -162,8 +182,10 @@
             // Mostra o botão para abrir no Google Maps se houver pontos
             if (routePoints.length > 0 || markerPoints.length > 0) {
                 document.getElementById('open-in-maps').classList.remove('hidden');
-                document.getElementById('maps-note').classList.remove('hidden');
             }
+            
+            // Cria a legenda
+            createLegend(kmlDoc);
         }
 
         function extractStyles(kmlDoc) {
@@ -249,17 +271,6 @@
             
             const latLng = new google.maps.LatLng(coords[1], coords[0]);
             
-            // Obtém o estilo
-            let iconUrl = null;
-            const styleUrlElement = placemark.querySelector('styleUrl');
-            
-            if (styleUrlElement) {
-                const styleId = styleUrlElement.textContent.replace('#', '');
-                if (styles[styleId]) {
-                    iconUrl = styles[styleId].iconUrl;
-                }
-            }
-            
             // Armazena o ponto para uso posterior
             const nameElement = placemark.querySelector('name');
             const name = nameElement ? nameElement.textContent : '';
@@ -270,7 +281,7 @@
             });
             
             // Cria o marcador
-            createMarker(placemark, latLng, iconUrl, map, bounds);
+            createMarker(placemark, latLng, map, bounds);
         }
 
         function processLineString(placemark, lineString, styles, map, bounds) {
@@ -358,7 +369,7 @@
             createPolygon(placemark, path, polyColor, map);
         }
 
-        function createMarker(placemark, latLng, iconUrl, map, bounds) {
+        function createMarker(placemark, latLng, map, bounds) {
             // Extrai informações do placemark
             const nameElement = placemark.querySelector('name');
             const descriptionElement = placemark.querySelector('description');
@@ -366,20 +377,16 @@
             const name = nameElement ? nameElement.textContent : '';
             const description = descriptionElement ? descriptionElement.textContent : '';
             
-            // Configuração do marcador
+            // Configuração do marcador - usando ícone padrão do Google Maps
             const markerOptions = {
                 position: latLng,
                 map: map,
-                title: name
-            };
-            
-            // Se temos uma URL de ícone personalizada, usamos
-            if (iconUrl) {
-                markerOptions.icon = {
-                    url: iconUrl,
+                title: name,
+                icon: {
+                    url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
                     scaledSize: new google.maps.Size(32, 32)
-                };
-            }
+                }
+            };
             
             const marker = new google.maps.Marker(markerOptions);
             
@@ -508,6 +515,31 @@
             }
             
             infoPanel.classList.remove('hidden');
+        }
+
+        function createLegend(kmlDoc) {
+            const legend = document.getElementById('legend');
+            const placemarks = kmlDoc.getElementsByTagName('Placemark');
+            let legendHTML = '<h4>Legenda</h4>';
+            
+            // Adiciona item para pontos
+            legendHTML += `
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #FF0000;"></div>
+                    <div>Pontos</div>
+                </div>
+            `;
+            
+            // Adiciona item para rotas
+            legendHTML += `
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #0000FF;"></div>
+                    <div>Rotas</div>
+                </div>
+            `;
+            
+            legend.innerHTML = legendHTML;
+            legend.classList.remove('hidden');
         }
 
         function showError(message) {
