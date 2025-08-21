@@ -217,12 +217,34 @@
             document.getElementById('map').innerHTML = `<div style="text-align: center; padding: 50px; font-size: 18px;">${message}</div>`;
         }
         
+        // --- FUNÇÃO CORRIGIDA ---
         function openRouteInGoogleMaps() {
-            if (routeWaypoints.length < 2) return;
-            const origin = routeWaypoints[0];
-            const destination = routeWaypoints[routeWaypoints.length - 1];
-            const waypoints = routeWaypoints.slice(1, -1).map(p => `${p.lat},${p.lng}`).join('|');
-            const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&waypoints=${waypoints}&travelmode=driving`;
+            if (routeWaypoints.length < 2) {
+                alert("A rota precisa de pelo menos dois pontos para ser aberta no Google Maps.");
+                return;
+            }
+
+            // O primeiro ponto é a origem
+            const origin = `${routeWaypoints[0].lat},${routeWaypoints[0].lng}`;
+            
+            // O último ponto é o destino
+            const destination = `${routeWaypoints[routeWaypoints.length - 1].lat},${routeWaypoints[routeWaypoints.length - 1].lng}`;
+            
+            // Todos os pontos entre o início e o fim são os waypoints
+            const waypoints = routeWaypoints
+                .slice(1, -1) // Pega todos os elementos, exceto o primeiro e o último
+                .map(p => `${p.lat},${p.lng}`)
+                .join('|'); // Formato exigido pela URL: lat,lng|lat,lng|...
+
+            // Constrói a URL usando o formato oficial da API Directions
+            let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+
+            // Adiciona os waypoints à URL apenas se eles existirem
+            if (waypoints) {
+                url += `&waypoints=${waypoints}`;
+            }
+
+            // Abre a URL em uma nova aba. No celular, isso abrirá o app do Google Maps.
             window.open(url, '_blank');
         }
 
