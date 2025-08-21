@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Visualizador de Rotograma com Ícones Personalizados</title>
+    <title>Visualizador de KML Completo</title>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
@@ -25,11 +25,26 @@
         .hidden {
             display: none;
         }
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="loading">Carregando KML...</div>
+    <div id="info-panel" class="hidden">
+        <h3>Informações</h3>
+        <div id="info-content"></div>
+    </div>
 
     <script>
         function initMap() {
@@ -37,13 +52,14 @@
             const kmlUrl = urlParams.get('kml');
             
             if (!kmlUrl) {
-                showError('Erro: Nenhuma URL de KML foi fornecida.');
+                showError('Erro: Nenhuma URL de KML foi fornecida. Adicione ?kml=URL_DO_SEU_KML ao final da URL');
                 return;
             }
 
             const map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
-                center: { lat: -14.235, lng: -51.925 } // Centro do Brasil
+                center: { lat: -14.235, lng: -51.925 }, // Centro do Brasil
+                mapTypeId: google.maps.MapTypeId.ROADMAP
             });
 
             // Carrega e processa o KML manualmente
@@ -64,13 +80,19 @@
                 .catch(error => {
                     console.error('Erro ao carregar KML:', error);
                     loadingDiv.classList.add('hidden');
-                    showError('Erro ao carregar o arquivo KML. Verifique se a URL está correta.');
+                    showError('Erro ao carregar o arquivo KML. Verifique se a URL está correta e acessível.');
                 });
         }
 
         function processKml(kmlText, map) {
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+            
+            // Verifica se o parsing foi bem-sucedido
+            if (kmlDoc.getElementsByTagName("parsererror").length > 0) {
+                showError('Erro ao processar o arquivo KML. Verifique se é um XML válido.');
+                return;
+            }
             
             // Extrai estilos
             const styles = extractStyles(kmlDoc);
@@ -79,15 +101,19 @@
             const placemarks = kmlDoc.getElementsByTagName('Placemark');
             const bounds = new google.maps.LatLngBounds();
             
+            // Processa cada placemark
             for (let i = 0; i < placemarks.length; i++) {
                 const placemark = placemarks[i];
                 processPlacemark(placemark, styles, map, bounds);
             }
             
-            // Ajusta o zoom para mostrar todos os marcadores
+            // Ajusta o zoom para mostrar todos os elementos
             if (!bounds.isEmpty()) {
                 map.fitBounds(bounds);
             }
+            
+            // Mostra informações do KML no painel
+            showKmlInfo(kmlDoc);
         }
 
         function extractStyles(kmlDoc) {
@@ -100,7 +126,10 @@
                 
                 if (id) {
                     styles[id] = {
-                        iconUrl: extractIconUrl(styleElement)
+                        iconUrl: extractIconUrl(styleElement),
+                        lineColor: extractLineColor(styleElement),
+                        lineWidth: extractLineWidth(styleElement),
+                        polyColor: extractPolyColor(styleElement)
                     };
                 }
             }
@@ -113,12 +142,63 @@
             return iconElement ? iconElement.textContent : null;
         }
 
+        function extractLineColor(styleElement) {
+            const colorElement = styleElement.querySelector('LineStyle > color');
+            return colorElement ? parseColor(colorElement.textContent) : '#0000FF';
+        }
+
+        function extractLineWidth(styleElement) {
+            const widthElement = styleElement.querySelector('LineStyle > width');
+            return widthElement ? parseInt(widthElement.textContent) : 2;
+        }
+
+        function extractPolyColor(styleElement) {
+            const colorElement = styleElement.querySelector('PolyStyle > color');
+            return colorElement ? parseColor(colorElement.textContent) : '#FF0000';
+        }
+
+        function parseColor(kmlColor) {
+            // KML colors are in the format aabbggrr (alpha, blue, green, red)
+            if (kmlColor && kmlColor.length === 8) {
+                const a = parseInt(kmlColor.substring(0, 2), 16) / 255;
+                const b = kmlColor.substring(2, 4);
+                const g = kmlColor.substring(4, 6);
+                const r = kmlColor.substring(6, 8);
+                return `rgba(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)}, ${a})`;
+            }
+            return '#FF0000';
+        }
+
         function processPlacemark(placemark, styles, map, bounds) {
-            // Obtém as coordenadas
-            const point = placemark.querySelector('Point > coordinates');
-            if (!point) return;
+            // Verifica se é um ponto
+            const point = placemark.querySelector('Point');
+            if (point) {
+                processPoint(placemark, point, styles, map, bounds);
+            }
             
-            const coords = point.textContent.split(',').map(Number);
+            // Verifica se é uma linha
+            const lineString = placemark.querySelector('LineString');
+            if (lineString) {
+                processLineString(placemark, lineString, styles, map, bounds);
+            }
+            
+            // Verifica se é um polígono
+            const polygon = placemark.querySelector('Polygon');
+            if (polygon) {
+                processPolygon(placemark, polygon, styles, map, bounds);
+            }
+            
+            // Podemos adicionar suporte para MultiGeometry aqui no futuro
+        }
+
+        function processPoint(placemark, point, styles, map, bounds) {
+            // Obtém as coordenadas
+            const coordinatesElement = point.querySelector('coordinates');
+            if (!coordinatesElement) return;
+            
+            const coords = coordinatesElement.textContent.split(',').map(Number);
+            if (coords.length < 2) return;
+            
             const latLng = new google.maps.LatLng(coords[1], coords[0]);
             
             // Obtém o estilo
@@ -134,6 +214,85 @@
             
             // Cria o marcador
             createMarker(placemark, latLng, iconUrl, map, bounds);
+        }
+
+        function processLineString(placemark, lineString, styles, map, bounds) {
+            // Obtém as coordenadas
+            const coordinatesElement = lineString.querySelector('coordinates');
+            if (!coordinatesElement) return;
+            
+            const coordsText = coordinatesElement.textContent.trim();
+            const coordLines = coordsText.split(/\s+/);
+            const path = [];
+            
+            for (let i = 0; i < coordLines.length; i++) {
+                if (coordLines[i] === '') continue;
+                
+                const coords = coordLines[i].split(',').map(Number);
+                if (coords.length >= 2) {
+                    const latLng = new google.maps.LatLng(coords[1], coords[0]);
+                    path.push(latLng);
+                    bounds.extend(latLng);
+                }
+            }
+            
+            if (path.length < 2) return;
+            
+            // Obtém o estilo
+            let lineColor = '#0000FF';
+            let lineWidth = 2;
+            const styleUrlElement = placemark.querySelector('styleUrl');
+            
+            if (styleUrlElement) {
+                const styleId = styleUrlElement.textContent.replace('#', '');
+                if (styles[styleId]) {
+                    lineColor = styles[styleId].lineColor || lineColor;
+                    lineWidth = styles[styleId].lineWidth || lineWidth;
+                }
+            }
+            
+            // Cria a polyline
+            createPolyline(placemark, path, lineColor, lineWidth, map);
+        }
+
+        function processPolygon(placemark, polygon, styles, map, bounds) {
+            // Obtém as coordenadas do outer boundary
+            const outerBoundary = polygon.querySelector('outerBoundaryIs');
+            if (!outerBoundary) return;
+            
+            const coordinatesElement = outerBoundary.querySelector('coordinates');
+            if (!coordinatesElement) return;
+            
+            const coordsText = coordinatesElement.textContent.trim();
+            const coordLines = coordsText.split(/\s+/);
+            const path = [];
+            
+            for (let i = 0; i < coordLines.length; i++) {
+                if (coordLines[i] === '') continue;
+                
+                const coords = coordLines[i].split(',').map(Number);
+                if (coords.length >= 2) {
+                    const latLng = new google.maps.LatLng(coords[1], coords[0]);
+                    path.push(latLng);
+                    bounds.extend(latLng);
+                }
+            }
+            
+            if (path.length < 3) return;
+            
+            // Obtém o estilo
+            let polyColor = '#FF0000';
+            const styleUrlElement = placemark.querySelector('styleUrl');
+            
+            if (styleUrlElement) {
+                const styleId = styleUrlElement.textContent.replace('#', '');
+                if (styles[styleId]) {
+                    polyColor = styles[styleId].polyColor || polyColor;
+                }
+            }
+            
+            // Cria o polígono
+            createPolygon(placemark, path, polyColor, map);
         }
 
         function createMarker(placemark, latLng, iconUrl, map, bounds) {
@@ -176,6 +335,102 @@
             bounds.extend(latLng);
         }
 
+        function createPolyline(placemark, path, color, width, map) {
+            // Extrai informações do placemark
+            const nameElement = placemark.querySelector('name');
+            const descriptionElement = placemark.querySelector('description');
+            
+            const name = nameElement ? nameElement.textContent : '';
+            const description = descriptionElement ? descriptionElement.textContent : '';
+            
+            // Cria a polyline
+            const polyline = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: color,
+                strokeOpacity: 0.8,
+                strokeWeight: width,
+                map: map
+            });
+            
+            // Adiciona info window se houver conteúdo
+            if (name || description) {
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `<div><strong>${name}</strong><br>${description}</div>`
+                });
+                
+                // Adiciona um marcador invisível no meio da linha para exibir a info window
+                const midIndex = Math.floor(path.length / 2);
+                const midPoint = path[midIndex];
+                
+                const hiddenMarker = new google.maps.Marker({
+                    position: midPoint,
+                    map: map,
+                    icon: {
+                        url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+                        size: new google.maps.Size(1, 1),
+                        anchor: new google.maps.Point(0, 0)
+                    },
+                    visible: false
+                });
+                
+                polyline.addListener('click', (event) => {
+                    infoWindow.setPosition(event.latLng);
+                    infoWindow.open(map);
+                });
+            }
+        }
+
+        function createPolygon(placemark, path, color, map) {
+            // Extrai informações do placemark
+            const nameElement = placemark.querySelector('name');
+            const descriptionElement = placemark.querySelector('description');
+            
+            const name = nameElement ? nameElement.textContent : '';
+            const description = descriptionElement ? descriptionElement.textContent : '';
+            
+            // Cria o polígono
+            const polygon = new google.maps.Polygon({
+                paths: path,
+                strokeColor: color,
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: color,
+                fillOpacity: 0.35,
+                map: map
+            });
+            
+            // Adiciona info window se houver conteúdo
+            if (name || description) {
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `<div><strong>${name}</strong><br>${description}</div>`
+                });
+                
+                polygon.addListener('click', (event) => {
+                    infoWindow.setPosition(event.latLng);
+                    infoWindow.open(map);
+                });
+            }
+        }
+
+        function showKmlInfo(kmlDoc) {
+            const nameElement = kmlDoc.querySelector('name');
+            const descriptionElement = kmlDoc.querySelector('description');
+            
+            const name = nameElement ? nameElement.textContent : 'Arquivo KML';
+            const description = descriptionElement ? descriptionElement.textContent : '';
+            
+            const infoPanel = document.getElementById('info-panel');
+            const infoContent = document.getElementById('info-content');
+            
+            infoContent.innerHTML = `<strong>${name}</strong>`;
+            if (description) {
+                infoContent.innerHTML += `<br>${description}`;
+            }
+            
+            infoPanel.classList.remove('hidden');
+        }
+
         function showError(message) {
             const mapDiv = document.getElementById('map');
             mapDiv.innerHTML = `<div style="text-align: center; padding-top: 50px; font-size: 18px;">${message}</div>`;
@@ -183,6 +438,8 @@
     </script>
     
     <!-- Substitua SUA_CHAVE_DE_API_AQUI pela sua chave API do Google Maps -->
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=initMap"></script>
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_DE_API_AQUI&callback=initMap">
+    </script>
 </body>
 </html>
