@@ -1,51 +1,188 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Visualizador de Rotograma</title>
+    <title>Visualizador de Rotograma com Ícones Personalizados</title>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
-        /* Define o mapa para ocupar a tela inteira */
         html, body, #map {
             height: 100%;
             margin: 0;
             padding: 0;
             font-family: sans-serif;
         }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="loading">Carregando KML...</div>
 
     <script>
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
+            
+            if (!kmlUrl) {
+                showError('Erro: Nenhuma URL de KML foi fornecida.');
+                return;
+            }
 
             const map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
                 center: { lat: -14.235, lng: -51.925 } // Centro do Brasil
             });
 
-            if (kmlUrl) {
-                // Usando a KmlLayer oficial do Google.
-                // O truque do nome de arquivo único que implementamos no Python
-                // deve forçar o Google a sempre buscar a versão mais recente.
-                const kmlLayer = new google.maps.KmlLayer({
-                    url: kmlUrl,
-                    map: map,
-                    preserveViewport: false // Faz o mapa dar zoom e centralizar no conteúdo do KML
+            // Carrega e processa o KML manualmente
+            loadKml(kmlUrl, map);
+        }
+
+        function loadKml(kmlUrl, map) {
+            const loadingDiv = document.getElementById('loading');
+            loadingDiv.classList.remove('hidden');
+            
+            fetch(kmlUrl)
+                .then(response => response.text())
+                .then(kmlText => {
+                    // Processa o KML manualmente
+                    processKml(kmlText, map);
+                    loadingDiv.classList.add('hidden');
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar KML:', error);
+                    loadingDiv.classList.add('hidden');
+                    showError('Erro ao carregar o arquivo KML. Verifique se a URL está correta.');
                 });
-            } else {
-                const infoWindow = new google.maps.InfoWindow({
-                    content: '<h1>Erro: Nenhuma URL de KML foi fornecida.</h1>',
-                    position: map.getCenter()
-                });
-                infoWindow.open(map);
+        }
+
+        function processKml(kmlText, map) {
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+            
+            // Extrai estilos
+            const styles = extractStyles(kmlDoc);
+            
+            // Processa placemarks
+            const placemarks = kmlDoc.getElementsByTagName('Placemark');
+            const bounds = new google.maps.LatLngBounds();
+            
+            for (let i = 0; i < placemarks.length; i++) {
+                const placemark = placemarks[i];
+                processPlacemark(placemark, styles, map, bounds);
             }
+            
+            // Ajusta o zoom para mostrar todos os marcadores
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds);
+            }
+        }
+
+        function extractStyles(kmlDoc) {
+            const styles = {};
+            const styleElements = kmlDoc.getElementsByTagName('Style');
+            
+            for (let i = 0; i < styleElements.length; i++) {
+                const styleElement = styleElements[i];
+                const id = styleElement.getAttribute('id');
+                
+                if (id) {
+                    styles[id] = {
+                        iconUrl: extractIconUrl(styleElement)
+                    };
+                }
+            }
+            
+            return styles;
+        }
+
+        function extractIconUrl(styleElement) {
+            const iconElement = styleElement.querySelector('IconStyle > Icon > href');
+            return iconElement ? iconElement.textContent : null;
+        }
+
+        function processPlacemark(placemark, styles, map, bounds) {
+            // Obtém as coordenadas
+            const point = placemark.querySelector('Point > coordinates');
+            if (!point) return;
+            
+            const coords = point.textContent.split(',').map(Number);
+            const latLng = new google.maps.LatLng(coords[1], coords[0]);
+            
+            // Obtém o estilo
+            let iconUrl = null;
+            const styleUrlElement = placemark.querySelector('styleUrl');
+            
+            if (styleUrlElement) {
+                const styleId = styleUrlElement.textContent.replace('#', '');
+                if (styles[styleId]) {
+                    iconUrl = styles[styleId].iconUrl;
+                }
+            }
+            
+            // Cria o marcador
+            createMarker(placemark, latLng, iconUrl, map, bounds);
+        }
+
+        function createMarker(placemark, latLng, iconUrl, map, bounds) {
+            // Extrai informações do placemark
+            const nameElement = placemark.querySelector('name');
+            const descriptionElement = placemark.querySelector('description');
+            
+            const name = nameElement ? nameElement.textContent : '';
+            const description = descriptionElement ? descriptionElement.textContent : '';
+            
+            // Configuração do marcador
+            const markerOptions = {
+                position: latLng,
+                map: map,
+                title: name
+            };
+            
+            // Se temos uma URL de ícone personalizada, usamos
+            if (iconUrl) {
+                markerOptions.icon = {
+                    url: iconUrl,
+                    scaledSize: new google.maps.Size(32, 32)
+                };
+            }
+            
+            const marker = new google.maps.Marker(markerOptions);
+            
+            // Adiciona info window se houver conteúdo
+            if (name || description) {
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `<div><strong>${name}</strong><br>${description}</div>`
+                });
+                
+                marker.addListener('click', () => {
+                    infoWindow.open(map, marker);
+                });
+            }
+            
+            // Expande os bounds para incluir este marcador
+            bounds.extend(latLng);
+        }
+
+        function showError(message) {
+            const mapDiv = document.getElementById('map');
+            mapDiv.innerHTML = `<div style="text-align: center; padding-top: 50px; font-size: 18px;">${message}</div>`;
         }
     </script>
     
+    <!-- Substitua SUA_CHAVE_DE_API_AQUI pela sua chave API do Google Maps -->
     <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCmDbEaw8opef4jzcAZePv3GFdkxDmC9tk&callback=initMap"></script>
 </body>
 </html>
