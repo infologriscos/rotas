@@ -45,12 +45,25 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
+            width: 100%;
         }
         #open-in-maps:hover {
             background-color: #3367D6;
         }
         .gm-ui-hover-effect {
             display: none !important;
+        }
+        .custom-info-window {
+            max-width: 250px;
+        }
+        .custom-info-window button {
+            margin-top: 8px;
+            padding: 6px 10px;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -61,6 +74,9 @@
         <h3>Informações</h3>
         <div id="info-content"></div>
         <button id="open-in-maps" class="hidden">Abrir no Google Maps</button>
+        <p id="maps-note" class="hidden" style="font-size: 12px; margin-top: 10px;">
+            Nota: Os ícones personalizados podem não aparecer no aplicativo do Google Maps.
+        </p>
     </div>
 
     <script>
@@ -146,6 +162,7 @@
             // Mostra o botão para abrir no Google Maps se houver pontos
             if (routePoints.length > 0 || markerPoints.length > 0) {
                 document.getElementById('open-in-maps').classList.remove('hidden');
+                document.getElementById('maps-note').classList.remove('hidden');
             }
         }
 
@@ -369,7 +386,15 @@
             // Adiciona info window se houver conteúdo
             if (name || description) {
                 const infoWindow = new google.maps.InfoWindow({
-                    content: `<div><strong>${name}</strong><br>${description}<br><button onclick="openPointInGoogleMaps(${latLng.lat()}, ${latLng.lng()}, '${name.replace(/'/g, "\\'")}')">Abrir no Google Maps</button></div>`
+                    content: `
+                        <div class="custom-info-window">
+                            <strong>${name}</strong><br>
+                            ${description}<br>
+                            <button onclick="openPointInGoogleMaps(${latLng.lat()}, ${latLng.lng()}, '${name.replace(/'/g, "\\'")}')">
+                                Abrir no Google Maps
+                            </button>
+                        </div>
+                    `
                 });
                 
                 marker.addListener('click', () => {
@@ -402,7 +427,15 @@
             // Adiciona info window se houver conteúdo
             if (name || description) {
                 const infoWindow = new google.maps.InfoWindow({
-                    content: `<div><strong>${name}</strong><br>${description}<br><button onclick="openRouteInGoogleMaps()">Abrir Rota no Google Maps</button></div>`
+                    content: `
+                        <div class="custom-info-window">
+                            <strong>${name}</strong><br>
+                            ${description}<br>
+                            <button onclick="openRouteInGoogleMaps()">
+                                Abrir Rota no Google Maps
+                            </button>
+                        </div>
+                    `
                 });
                 
                 // Adiciona um marcador invisível no meio da linha para exibir a info window
