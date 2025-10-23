@@ -5,15 +5,17 @@
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
+        /* Estilos CSS permanecem os mesmos */
         html, body, #map { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; }
         .hidden { display: none; }
         #info-panel { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); max-width: 300px; z-index: 1000; }
         #open-in-maps { margin-top: 10px; padding: 8px 12px; background-color: #4285F4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
         .custom-info-window { max-width: 250px; }
-        #legend { position: absolute; bottom: 30px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; font-size: 12px; }
+        #legend { position: absolute; bottom: 30px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; font-size: 12px; max-height: 40%; overflow-y: auto;} /* Adicionado overflow */
         .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
-        .legend-icon { width: 24px; height: 24px; margin-right: 8px; }
+        .legend-icon { width: 24px; height: 24px; margin-right: 8px; object-fit: contain;} /* Adicionado object-fit */
+        #legend h6 { margin-top: 0; margin-bottom: 8px; font-weight: bold; font-size: 13px; } /* Estilo para o título */
     </style>
 </head>
 <body>
@@ -23,17 +25,18 @@
         <div id="info-content"></div>
         <button id="open-in-maps" class="hidden">Abrir Rota no App do Google Maps</button>
     </div>
-    <div id="legend" class="hidden"></div>
+    <div id="legend" class="hidden"><h6>Legenda</h6></div>
 
     <script>
         // Variáveis globais
         let map;
         let routeWaypoints = [];
+        let kmlDocumentGlobal = null; // Para armazenar o KML processado
 
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
             const kmlUrl = urlParams.get('kml');
-            
+
             if (!kmlUrl) {
                 showError('Erro: Nenhuma URL de KML foi fornecida.');
                 return;
@@ -41,7 +44,7 @@
 
             map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
-                center: { lat: -14.235, lng: -51.925 },
+                center: { lat: -14.235, lng: -51.925 }, // Centro do Brasil
                 mapTypeControl: false,
                 streetViewControl: false
             });
@@ -53,14 +56,19 @@
         function loadKml(kmlUrl, map) {
             const loadingDiv = document.getElementById('loading');
             loadingDiv.classList.remove('hidden');
-            
+
             fetch(kmlUrl)
                 .then(response => {
                     if (!response.ok) { throw new Error('Falha na rede ao buscar KML'); }
                     return response.text();
                 })
                 .then(kmlText => {
-                    processKml(kmlText, map);
+                    // Processa o KML e armazena o documento parseado
+                    kmlDocumentGlobal = processKml(kmlText, map);
+                    // Se o processamento foi ok, cria a legenda
+                    if (kmlDocumentGlobal) {
+                        createLegend(kmlDocumentGlobal);
+                    }
                     loadingDiv.classList.add('hidden');
                 })
                 .catch(error => {
@@ -72,94 +80,137 @@
         function processKml(kmlText, map) {
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
-            
+
             if (kmlDoc.getElementsByTagName("parsererror").length > 0) {
                 showError('Erro ao processar o KML. Verifique se o arquivo é um XML válido.');
-                return;
+                return null; // Retorna null em caso de erro
             }
-            
-            const styles = extractStyles(kmlDoc);
+
+            const styles = extractStyles(kmlDoc); // Extrai estilos PRIMEIRO
             const placemarks = kmlDoc.getElementsByTagName('Placemark');
             const bounds = new google.maps.LatLngBounds();
-            
-            routeWaypoints = [];
-            
+
+            routeWaypoints = []; // Limpa waypoints anteriores
+
             for (let i = 0; i < placemarks.length; i++) {
                 processPlacemark(placemarks[i], styles, map, bounds);
             }
-            
+
             if (!bounds.isEmpty()) {
                 map.fitBounds(bounds);
             }
-            
+
             showKmlInfo(kmlDoc);
-            createLegend(styles);
+            return kmlDoc; // Retorna o documento KML processado
         }
 
         function extractStyles(kmlDoc) {
             const styles = {};
+            // Tenta buscar StyleMap primeiro (para estilos normais e de highlight)
+            const styleMapElements = kmlDoc.getElementsByTagName('StyleMap');
+            for (let i = 0; i < styleMapElements.length; i++) {
+                const id = '#' + styleMapElements[i].getAttribute('id');
+                if (id) {
+                    // Prioriza o estilo 'normal' dentro do StyleMap
+                    const normalStyleUrl = styleMapElements[i].querySelector('Pair > key:contains("normal") + styleUrl')?.textContent;
+                    if (normalStyleUrl) {
+                        // Busca o Style referenciado pelo styleUrl 'normal'
+                         const normalStyle = kmlDoc.querySelector(`Style[id="${normalStyleUrl.substring(1)}"]`);
+                         if (normalStyle) {
+                             const iconHref = normalStyle.querySelector('IconStyle > Icon > href')?.textContent;
+                             styles[id] = { iconHref: iconHref || null }; // Armazena apenas o ícone por simplicidade
+                         }
+                    }
+                }
+            }
+
+            // Busca Styles simples (caso não usem StyleMap)
             const styleElements = kmlDoc.getElementsByTagName('Style');
             for (let i = 0; i < styleElements.length; i++) {
                 const id = '#' + styleElements[i].getAttribute('id');
-                if (id) {
+                 // Só adiciona se não foi pego pelo StyleMap
+                if (id && !styles[id]) {
                     const iconHref = styleElements[i].querySelector('IconStyle > Icon > href')?.textContent;
-                    const lineColor = styleElements[i].querySelector('LineStyle > color')?.textContent;
-                    const lineWidth = styleElements[i].querySelector('LineStyle > width')?.textContent;
-                    const polyColor = styleElements[i].querySelector('PolyStyle > color')?.textContent;
-                    styles[id] = { iconHref, lineColor, lineWidth, polyColor };
+                    // Ignora estilos sem ícone (podem ser de linhas/polígonos)
+                    if(iconHref) {
+                         styles[id] = { iconHref };
+                    }
                 }
             }
             return styles;
         }
-        
+
         function processPlacemark(placemark, styles, map, bounds) {
             const name = placemark.querySelector('name')?.textContent || '';
             const description = placemark.querySelector('description')?.textContent || '';
             const styleUrl = placemark.querySelector('styleUrl')?.textContent || '';
+            // A função extractStyles já deve ter resolvido StyleMap, então pegamos direto
             const style = styles[styleUrl] || {};
 
             const point = placemark.querySelector('Point > coordinates');
             const lineString = placemark.querySelector('LineString > coordinates');
             const polygon = placemark.querySelector('Polygon > outerBoundaryIs > LinearRing > coordinates');
 
+            // --- Processamento de Ponto (Marker) ---
             if (point) {
                 const coords = point.textContent.split(',').map(Number);
                 const latLng = new google.maps.LatLng(coords[1], coords[0]);
-                const marker = new google.maps.Marker({
+                const markerOptions = {
                     position: latLng,
                     map: map,
-                    title: name,
-                    icon: style.iconHref ? { url: style.iconHref, scaledSize: new google.maps.Size(32, 32) } : null
+                    title: name
+                };
+                // Define o ícone se ele foi encontrado nos estilos
+                if (style.iconHref) {
+                    markerOptions.icon = {
+                        url: style.iconHref,
+                        scaledSize: new google.maps.Size(24, 24) // Tamanho fixo para consistência
+                    };
+                }
+                const marker = new google.maps.Marker(markerOptions);
+                const infoWindow = new google.maps.InfoWindow({
+                     content: `<div class="custom-info-window"><strong>${name}</strong><br>${description}</div>`
                 });
-                const infoWindow = new google.maps.InfoWindow({ content: `<strong>${name}</strong><br>${description}` });
                 marker.addListener('click', () => infoWindow.open(map, marker));
                 bounds.extend(latLng);
             }
 
+            // --- Processamento de Linha (Polyline) ---
             if (lineString) {
                 const path = parseCoordinates(lineString.textContent);
-                routeWaypoints = path.slice(); // Salva a rota para o botão "Abrir no Maps"
-                const polyline = new google.maps.Polyline({
-                    path: path,
-                    geodesic: true,
-                    strokeColor: kmlColorToCss(style.lineColor, 1),
-                    strokeOpacity: 1.0,
-                    strokeWeight: style.lineWidth || 4,
-                    map: map
-                });
-                path.forEach(p => bounds.extend(p));
-                document.getElementById('open-in-maps').classList.remove('hidden');
+                if (path.length > 0) { // Garante que a rota tem pontos
+                    routeWaypoints = path.slice(); // Salva a rota para o botão "Abrir no Maps"
+                    const polyline = new google.maps.Polyline({
+                        path: path,
+                        geodesic: true,
+                        // Busca a cor e largura do Style 'inline' ou referenciado
+                        strokeColor: kmlColorToCss(placemark.querySelector('LineStyle > color')?.textContent || style.lineColor, 1),
+                        strokeOpacity: 1.0, // Opacidade está na cor KML (ABGR)
+                        strokeWeight: parseInt(placemark.querySelector('LineStyle > width')?.textContent || style.lineWidth || '4'),
+                        map: map
+                    });
+                    path.forEach(p => bounds.extend(p));
+                    // Mostra o botão apenas se uma rota válida foi encontrada
+                    document.getElementById('open-in-maps').classList.remove('hidden');
+                }
             }
 
+             // --- Processamento de Polígono (Polygon) ---
             if (polygon) {
                 const path = parseCoordinates(polygon.textContent);
+                 // Busca a cor de preenchimento e contorno do Style 'inline' ou referenciado
+                 const polyStyleColor = placemark.querySelector('PolyStyle > color')?.textContent || style.polyColor;
+                 // PolyStyle pode ter cor de contorno separada (outline), mas simplificamos aqui
+                 const lineStyleColor = placemark.querySelector('LineStyle > color')?.textContent || style.lineColor || polyStyleColor; // Usa polyColor se lineColor não definido
+                 const lineStyleWidth = parseInt(placemark.querySelector('LineStyle > width')?.textContent || style.lineWidth || '1');
+
                 const shape = new google.maps.Polygon({
                     paths: path,
-                    strokeColor: kmlColorToCss(style.polyColor, 1),
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: kmlColorToCss(style.polyColor, 0.35),
-                    fillOpacity: 1, // Opacidade já está na cor
+                    strokeColor: kmlColorToCss(lineStyleColor, 1), // Cor do contorno
+                    strokeOpacity: 1, // Opacidade na cor
+                    strokeWeight: lineStyleWidth,
+                    fillColor: kmlColorToCss(polyStyleColor, 0.35), // Cor do preenchimento
+                    fillOpacity: 1, // Opacidade na cor
                     map: map
                 });
                 path.forEach(p => bounds.extend(p));
@@ -167,85 +218,127 @@
         }
 
         function parseCoordinates(coordsText) {
-            return coordsText.trim().split(/\s+/).map(pair => {
+            // Remove espaços extras e divide por espaços em branco (incluindo quebras de linha)
+            const pairs = coordsText.trim().split(/\s+/);
+            const path = [];
+            pairs.forEach(pair => {
                 const coords = pair.split(',').map(Number);
-                return { lat: coords[1], lng: coords[0] };
+                // Verifica se tem pelo menos latitude e longitude
+                if (coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+                    path.push({ lat: coords[1], lng: coords[0] }); // Formato Google Maps: {lat, lng}
+                }
             });
+            return path;
         }
-        
+
         function kmlColorToCss(kmlColor, defaultOpacity = 1) {
-            if (!kmlColor || kmlColor.length !== 8) return `rgba(0,0,255,${defaultOpacity})`;
-            const a = parseInt(kmlColor.substring(0, 2), 16) / 255;
-            const b = parseInt(kmlColor.substring(2, 4), 16);
-            const g = parseInt(kmlColor.substring(4, 6), 16);
-            const r = parseInt(kmlColor.substring(6, 8), 16);
-            return `rgba(${r}, ${g}, ${b}, ${a})`;
+            // KML usa ABGR (Alpha, Blue, Green, Red), CSS usa RGBA
+            if (!kmlColor || typeof kmlColor !== 'string' || kmlColor.length !== 8) {
+                 // Cor padrão azul se inválido
+                return `rgba(0,0,255,${defaultOpacity})`;
+            }
+            try {
+                const a = parseInt(kmlColor.substring(0, 2), 16) / 255; // Alpha
+                const b = parseInt(kmlColor.substring(2, 4), 16); // Blue
+                const g = parseInt(kmlColor.substring(4, 6), 16); // Green
+                const r = parseInt(kmlColor.substring(6, 8), 16); // Red
+                return `rgba(${r}, ${g}, ${b}, ${a})`;
+            } catch (e) {
+                console.error("Erro ao converter cor KML:", kmlColor, e);
+                 return `rgba(0,0,255,${defaultOpacity})`; // Cor padrão em caso de erro
+            }
         }
 
         function showKmlInfo(kmlDoc) {
+            // Pega o nome do Documento KML para o painel de info
             const name = kmlDoc.querySelector('Document > name')?.textContent || 'Rotograma';
             document.getElementById('info-content').innerHTML = `<strong>${name}</strong>`;
             document.getElementById('info-panel').classList.remove('hidden');
         }
 
-        function createLegend(styles) {
-            const legend = document.getElementById('legend');
-            const kmlFolders = document.querySelectorAll('Folder');
-            let legendHTML = '<h6>Legenda</h6>';
-            const addedIcons = new Set();
+        // --- FUNÇÃO DA LEGENDA ATUALIZADA ---
+        function createLegend(kmlDoc) {
+            const legendDiv = document.getElementById('legend');
+            let legendHTML = '<h6>Legenda</h6>'; // Reinicia com o título
+            const addedIcons = new Set(); // Para evitar ícones duplicados na legenda
+
+            // Re-extrai os estilos para garantir que temos a referência correta
+            const styles = extractStyles(kmlDoc);
+
+            // Seleciona todas as Pastas (Folders) dentro do Documento KML
+            const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
 
             kmlFolders.forEach(folder => {
-                const placemark = folder.querySelector('Placemark');
-                if (!placemark) return;
+                // Verifica se esta pasta contém PELO MENOS UM Placemark com um PONTO DENTRO
+                const firstPlacemarkWithPoint = folder.querySelector('Placemark > Point');
 
+                // Se não encontrou nenhum ponto nesta pasta, PULA para a próxima pasta
+                if (!firstPlacemarkWithPoint) {
+                    return; // 'continue' para o forEach
+                }
+
+                 // Se encontrou um ponto, pega o Placemark pai dele
+                 const placemark = firstPlacemarkWithPoint.closest('Placemark');
+                 if (!placemark) return; // Segurança extra
+
+                // Pega o nome da Pasta (Folder) para usar como texto da legenda
+                const folderName = folder.querySelector('name')?.textContent || 'Tipo Desconhecido';
+
+                // Pega a URL do estilo usada por este Placemark
                 const styleUrl = placemark.querySelector('styleUrl')?.textContent;
-                if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref && !addedIcons.has(styles[styleUrl].iconHref)) {
-                    const folderName = folder.querySelector('name')?.textContent || 'Pontos';
-                    legendHTML += `<div class="legend-item"><img src="${styles[styleUrl].iconHref}" class="legend-icon"> ${folderName}</div>`;
-                    addedIcons.add(styles[styleUrl].iconHref);
+
+                // Busca o ícone correspondente nos estilos extraídos
+                if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
+                    const iconHref = styles[styleUrl].iconHref;
+
+                    // Verifica se este ÍCONE específico já foi adicionado à legenda
+                    if (!addedIcons.has(iconHref)) {
+                        // Se não foi adicionado, cria o HTML do item da legenda
+                        legendHTML += `<div class="legend-item">
+                                         <img src="${iconHref}" class="legend-icon" alt="${folderName}">
+                                         <span>${folderName}</span>
+                                       </div>`;
+                        // Marca este ícone como adicionado
+                        addedIcons.add(iconHref);
+                    }
                 }
             });
-            
+
+            // Se pelo menos um ícone foi adicionado à legenda...
             if (addedIcons.size > 0) {
-                legend.innerHTML = legendHTML;
-                legend.classList.remove('hidden');
+                legendDiv.innerHTML = legendHTML; // Atualiza o conteúdo HTML da div da legenda
+                legendDiv.classList.remove('hidden'); // Torna a legenda visível
+            } else {
+                 legendDiv.classList.add('hidden'); // Garante que a legenda fique escondida se nada for adicionado
             }
         }
+        // --- FIM DA FUNÇÃO DA LEGENDA ---
 
         function showError(message) {
             document.getElementById('loading').classList.add('hidden');
-            document.getElementById('map').innerHTML = `<div style="text-align: center; padding: 50px; font-size: 18px;">${message}</div>`;
+            // Mostra a mensagem de erro onde o mapa deveria estar
+            document.getElementById('map').innerHTML = `<div style="text-align: center; padding: 50px; font-size: 18px; color: red;">${message}</div>`;
         }
-        
-        // --- FUNÇÃO CORRIGIDA ---
+
+        // --- Função para abrir no Google Maps ---
         function openRouteInGoogleMaps() {
-            if (routeWaypoints.length < 2) {
-                alert("A rota precisa de pelo menos dois pontos para ser aberta no Google Maps.");
-                return;
-            }
+             if (routeWaypoints.length < 2) {
+                 alert("A rota precisa de pelo menos dois pontos para ser aberta no Google Maps.");
+                 return;
+             }
+             const origin = `${routeWaypoints[0].lat},${routeWaypoints[0].lng}`;
+             const destination = `${routeWaypoints[routeWaypoints.length - 1].lat},${routeWaypoints[routeWaypoints.length - 1].lng}`;
+             const waypoints = routeWaypoints
+                 .slice(1, -1) // Pega todos entre o primeiro e o último
+                 .map(p => `${p.lat},${p.lng}`)
+                 .join('|');
 
-            // O primeiro ponto é a origem
-            const origin = `${routeWaypoints[0].lat},${routeWaypoints[0].lng}`;
-            
-            // O último ponto é o destino
-            const destination = `${routeWaypoints[routeWaypoints.length - 1].lat},${routeWaypoints[routeWaypoints.length - 1].lng}`;
-            
-            // Todos os pontos entre o início e o fim são os waypoints
-            const waypoints = routeWaypoints
-                .slice(1, -1) // Pega todos os elementos, exceto o primeiro e o último
-                .map(p => `${p.lat},${p.lng}`)
-                .join('|'); // Formato exigido pela URL: lat,lng|lat,lng|...
-
-            // Constrói a URL usando o formato oficial da API Directions
-            let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
-
-            // Adiciona os waypoints à URL apenas se eles existirem
-            if (waypoints) {
-                url += `&waypoints=${waypoints}`;
-            }
-
-            // Abre a URL em uma nova aba. No celular, isso abrirá o app do Google Maps.
-            window.open(url, '_blank');
+              // Usa a URL universal do Google Maps Directions
+             let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+             if (waypoints) {
+                 url += `&waypoints=${waypoints}`;
+             }
+             window.open(url, '_blank');
         }
 
     </script>
