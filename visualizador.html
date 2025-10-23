@@ -310,43 +310,81 @@
             document.getElementById('info-panel').classList.remove('hidden');
         }
 
+        // --- FUNÇÃO DA LEGENDA ATUALIZADA COM CONTAGEM ---
         function createLegend(kmlDoc) {
-             // ...(função inalterada)...
             const legendDiv = document.getElementById('legend');
-            let legendHTML = '<h6>Legenda</h6>';
-            const addedIcons = new Set();
+            let legendHTML = '<h6>Legenda</h6>'; // Reinicia com o título
+            const iconCounts = {}; // Objeto para armazenar contagens {iconHref: { name: 'Nome Pasta', count: 0 }}
+            let totalIconsAdded = 0; // Contador geral para saber se a legenda deve ser exibida
+
+            // Re-extrai os estilos para garantir que temos a referência correta
             const styles = extractStyles(kmlDoc);
+
+            // Seleciona todas as Pastas (Folders) dentro do Documento KML
             const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
 
             kmlFolders.forEach(folder => {
-                const firstPlacemarkWithPoint = folder.querySelector('Placemark > Point');
-                if (!firstPlacemarkWithPoint) return;
-                const placemark = firstPlacemarkWithPoint.closest('Placemark');
-                if (!placemark) return;
-
+                // Pega o nome da Pasta (Folder)
                 const folderName = folder.querySelector('name')?.textContent || 'Tipo Desconhecido';
-                const styleUrl = placemark.querySelector('styleUrl')?.textContent;
 
-                if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
-                    const iconHref = styles[styleUrl].iconHref;
-                    if (!addedIcons.has(iconHref)) {
-                        legendHTML += `<div class="legend-item">
-                                         <img src="${iconHref}" class="legend-icon" alt="${folderName}">
-                                         <span>${folderName}</span>
-                                       </div>`;
-                        addedIcons.add(iconHref);
+                // Seleciona TODOS os Placemarks com Ponto dentro desta pasta
+                const placemarksInFolder = folder.querySelectorAll('Placemark > Point');
+
+                // Itera sobre cada ponto encontrado na pasta
+                placemarksInFolder.forEach(pointElement => {
+                    const placemark = pointElement.closest('Placemark'); // Pega o Placemark pai
+                    if (!placemark) return;
+
+                    // Pega a URL do estilo usada por este Placemark
+                    const styleUrl = placemark.querySelector('styleUrl')?.textContent;
+
+                    // Busca o ícone correspondente nos estilos extraídos
+                    if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
+                        const iconHref = styles[styleUrl].iconHref;
+
+                        // Se este ícone ainda não foi visto, inicializa a contagem
+                        if (!iconCounts[iconHref]) {
+                            iconCounts[iconHref] = { name: folderName, count: 0 };
+                        }
+                        // Incrementa a contagem para este ícone
+                        iconCounts[iconHref].count += 1;
                     }
-                }
+                     else {
+                         // Opcional: Contar pontos sem ícone definido (usará ícone padrão do Google Maps)
+                         const defaultIconKey = 'default_google_icon';
+                         if (!iconCounts[defaultIconKey]) {
+                             iconCounts[defaultIconKey] = { name: 'Outros Pontos (Padrão)', count: 0 };
+                         }
+                         iconCounts[defaultIconKey].count += 1;
+                         console.warn(`Placemark em "${folderName}" sem ícone definido.`);
+                     }
+                });
             });
 
-            if (addedIcons.size > 0) {
-                legendDiv.innerHTML = legendHTML;
-                legendDiv.classList.remove('hidden');
+            // Agora, constrói o HTML da legenda a partir das contagens
+            for (const iconHref in iconCounts) {
+                const item = iconCounts[iconHref];
+                 // Decide qual imagem mostrar (ícone específico ou um placeholder para o padrão)
+                 const imgSrc = (iconHref === 'default_google_icon')
+                    ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' // Ícone padrão vermelho do Google
+                    : iconHref; // URL do seu ícone customizado
+
+                legendHTML += `<div class="legend-item">
+                                 <img src="${imgSrc}" class="legend-icon" alt="${item.name}">
+                                 <span>${item.name} (${item.count})</span>
+                               </div>`;
+                totalIconsAdded++; // Incrementa contador geral
+            }
+
+            // Se pelo menos um tipo de ícone foi contado...
+            if (totalIconsAdded > 0) {
+                legendDiv.innerHTML = legendHTML; // Atualiza o conteúdo HTML da div da legenda
+                legendDiv.classList.remove('hidden'); // Torna a legenda visível
             } else {
-                 legendDiv.classList.add('hidden');
+                 legendDiv.classList.add('hidden'); // Garante que a legenda fique escondida se nada for adicionado
             }
         }
-
+        
         function showError(message) {
              // ...(função inalterada)...
             document.getElementById('loading').classList.add('hidden');
