@@ -218,13 +218,12 @@
                  if (path.length > 0) {
                     // Define cores e estilos padrão ou busca nos estilos/inline
                     let polyFillColorKML = inlinePolyColor || style.polyColor; // Prioriza inline
-                    // Define cor do contorno: Usa LineStyle se houver, senão usa PolyStyle se outline=1, senão usa FillColor
                     let polyStrokeColorKML = inlineLineColor || style.lineColor || (inlinePolyOutline === '1' || style.polyOutline === '1' ? polyFillColorKML : null);
                     let polyStrokeWidth = parseInt(inlineLineWidth || style.lineWidth || '1');
-                    let polyFill = inlinePolyFill !== '0'; // Se '0' é não preencher, senão preenche
-                    let polyOutline = inlinePolyOutline !== '0'; // Se '0' é sem contorno, senão tem contorno
+                    let polyFill = inlinePolyFill !== '0';
+                    let polyOutline = inlinePolyOutline !== '0';
 
-                    // *** ESTILO ESPECÍFICO PARA ÁREAS DE RISCO ***
+                    // ESTILO ESPECÍFICO PARA ÁREAS DE RISCO
                     let isAreaDeRisco = (folderName === 'Áreas de Risco');
 
                     const polygonOptions = {
@@ -237,13 +236,31 @@
                         map: map
                     };
 
-                    // Se outline=0 no KML, remove o contorno (exceto se for Area de Risco)
                     if (!polyOutline && !isAreaDeRisco) {
                          polygonOptions.strokeWeight = 0;
                          polygonOptions.strokeOpacity = 0;
                     }
 
                     const shape = new google.maps.Polygon(polygonOptions);
+
+                    // --- ADICIONADO: InfoWindow para Polígonos ---
+                    if (shape) { // Garante que o polígono foi criado
+                        // Usa o nome da pasta e o nome do Placemark (que deve ser Cidade, Estado)
+                        const infoWindowContent = `<div class="custom-info-window">
+                                                     <strong>${folderName}</strong>
+                                                     <div class="point-name">${name}</div>
+                                                     ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
+                                                   </div>`;
+                        const infoWindow = new google.maps.InfoWindow({ content: infoWindowContent });
+
+                        // Adiciona um listener de clique ao polígono
+                        google.maps.event.addListener(shape, 'click', function(event) {
+                            // Define a posição do InfoWindow para onde o usuário clicou dentro do polígono
+                            infoWindow.setPosition(event.latLng);
+                            infoWindow.open(map); // Abre no mapa (não associado a um marcador)
+                        });
+                    }
+
                     path.forEach(p => bounds.extend(p));
                 }
             }
