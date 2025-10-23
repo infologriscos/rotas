@@ -5,15 +5,17 @@
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
-        /* Estilos CSS permanecem os mesmos */
+        /* Estilos CSS */
         html, body, #map { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; }
         .hidden { display: none; }
         #info-panel { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); max-width: 300px; z-index: 1000; }
         #open-in-maps { margin-top: 10px; padding: 8px 12px; background-color: #4285F4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
-        .custom-info-window { max-width: 250px; line-height: 1.4; } /* Melhoria no espaçamento */
+        /* Estilos para o balão de informação */
+        .custom-info-window { max-width: 250px; line-height: 1.4; }
         .custom-info-window strong { display: block; margin-bottom: 3px; font-size: 1.1em; color: #333; } /* Título Categoria */
         .custom-info-window .point-name { font-weight: bold; color: #555;} /* Nome do Ponto */
+        /* Estilos para a legenda */
         #legend { position: absolute; bottom: 30px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; font-size: 12px; max-height: 40%; overflow-y: auto;}
         .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
         .legend-icon { width: 24px; height: 24px; margin-right: 8px; object-fit: contain;}
@@ -58,7 +60,7 @@
 
             fetch(kmlUrl)
                 .then(response => {
-                    if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); } // Melhora log de erro
+                    if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
                     return response.text();
                 })
                 .then(kmlText => {
@@ -72,7 +74,6 @@
                 });
         }
 
-        // --- FUNÇÃO processKml MODIFICADA ---
         function processKml(kmlText, map) {
             const parser = new DOMParser();
             const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
@@ -85,9 +86,9 @@
 
             const styles = extractStyles(kmlDoc);
             const bounds = new google.maps.LatLngBounds();
-            routeWaypoints = []; // Limpa rotas anteriores
+            routeWaypoints = [];
 
-            // *** MUDANÇA AQUI: Iterar por Pastas (Folders) primeiro ***
+            // Iterar por Pastas (Folders) primeiro
             const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
             kmlFolders.forEach(folder => {
                 const folderName = folder.querySelector('name')?.textContent || 'Sem Categoria';
@@ -98,13 +99,11 @@
                     processPlacemark(placemark, folderName, styles, map, bounds);
                 });
             });
-            // *** FIM DA MUDANÇA ***
 
             if (!bounds.isEmpty()) {
                 map.fitBounds(bounds);
             } else {
                  console.warn("Nenhum elemento KML encontrado para ajustar limites do mapa.");
-                 // Pode definir um zoom/centro padrão se nada for encontrado
                  map.setCenter({ lat: -14.235, lng: -51.925 });
                  map.setZoom(4);
             }
@@ -112,12 +111,11 @@
             showKmlInfo(kmlDoc);
             return kmlDoc;
         }
-        // --- FIM DA FUNÇÃO processKml ---
 
 
         function extractStyles(kmlDoc) {
-            // ...(função inalterada)...
             const styles = {};
+            // Tenta buscar StyleMap primeiro
             const styleMapElements = kmlDoc.getElementsByTagName('StyleMap');
             for (let i = 0; i < styleMapElements.length; i++) {
                 const id = '#' + styleMapElements[i].getAttribute('id');
@@ -127,25 +125,31 @@
                          const normalStyle = kmlDoc.querySelector(`Style[id="${normalStyleUrl.substring(1)}"]`);
                          if (normalStyle) {
                              const iconHref = normalStyle.querySelector('IconStyle > Icon > href')?.textContent;
-                             styles[id] = { iconHref: iconHref || null };
+                             // Adiciona também cores/largura do Style normal para referência futura
+                             const lineColor = normalStyle.querySelector('LineStyle > color')?.textContent;
+                             const lineWidth = normalStyle.querySelector('LineStyle > width')?.textContent;
+                             const polyColor = normalStyle.querySelector('PolyStyle > color')?.textContent;
+                             styles[id] = { iconHref: iconHref || null, lineColor, lineWidth, polyColor };
                          }
                     }
                 }
             }
+            // Busca Styles simples
             const styleElements = kmlDoc.getElementsByTagName('Style');
             for (let i = 0; i < styleElements.length; i++) {
                 const id = '#' + styleElements[i].getAttribute('id');
-                if (id && !styles[id]) {
+                if (id && !styles[id]) { // Só adiciona se não foi pego pelo StyleMap
                     const iconHref = styleElements[i].querySelector('IconStyle > Icon > href')?.textContent;
-                    if(iconHref) {
-                         styles[id] = { iconHref };
-                    }
+                    const lineColor = styleElements[i].querySelector('LineStyle > color')?.textContent;
+                    const lineWidth = styleElements[i].querySelector('LineStyle > width')?.textContent;
+                    const polyColor = styleElements[i].querySelector('PolyStyle > color')?.textContent;
+                    // Adiciona mesmo se não tiver ícone, pois pode ser estilo de linha/polígono
+                    styles[id] = { iconHref, lineColor, lineWidth, polyColor };
                 }
             }
             return styles;
         }
 
-        // --- FUNÇÃO processPlacemark MODIFICADA ---
         // Adicionado parâmetro folderName
         function processPlacemark(placemark, folderName, styles, map, bounds) {
             const name = placemark.querySelector('name')?.textContent || '';
@@ -153,12 +157,12 @@
             const styleUrl = placemark.querySelector('styleUrl')?.textContent || '';
             const style = styles[styleUrl] || {}; // Estilo referenciado
 
-            // Cores e larguras que podem ser definidas inline no Placemark (têm prioridade)
+            // Cores e larguras que podem ser definidas inline no Placemark
             const inlineLineColor = placemark.querySelector('LineStyle > color')?.textContent;
             const inlineLineWidth = placemark.querySelector('LineStyle > width')?.textContent;
             const inlinePolyColor = placemark.querySelector('PolyStyle > color')?.textContent;
-            // Cor de contorno do polígono (se existir inline)
-            const inlinePolyOutlineColor = placemark.querySelector('PolyStyle > outline')?.textContent === '1' ? inlineLineColor : null;
+            const inlinePolyOutline = placemark.querySelector('PolyStyle > outline')?.textContent; // '1' ou '0'
+            const inlinePolyFill = placemark.querySelector('PolyStyle > fill')?.textContent; // '1' ou '0'
 
 
             const point = placemark.querySelector('Point > coordinates');
@@ -168,10 +172,9 @@
             // --- Processamento de Ponto (Marker) ---
             if (point) {
                 const coords = point.textContent.split(',').map(Number);
-                 // Validação simples das coordenadas
                 if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) {
                     console.warn(`Coordenadas inválidas para o ponto "${name}" em "${folderName}":`, point.textContent);
-                    return; // Pula este ponto
+                    return;
                 }
                 const latLng = new google.maps.LatLng(coords[1], coords[0]);
                 const markerOptions = { position: latLng, map: map, title: name };
@@ -180,15 +183,13 @@
                 }
                 const marker = new google.maps.Marker(markerOptions);
 
-                // *** MUDANÇA AQUI: Adiciona folderName ao InfoWindow ***
+                // Adiciona folderName ao InfoWindow
                 const infoWindowContent = `<div class="custom-info-window">
                                              <strong>${folderName}</strong>
                                              <div class="point-name">${name}</div>
                                              ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
                                            </div>`;
                 const infoWindow = new google.maps.InfoWindow({ content: infoWindowContent });
-                // *** FIM DA MUDANÇA ***
-
                 marker.addListener('click', () => infoWindow.open(map, marker));
                 bounds.extend(latLng);
             }
@@ -201,8 +202,8 @@
                     const polyline = new google.maps.Polyline({
                         path: path,
                         geodesic: true,
-                        strokeColor: kmlColorToCss(inlineLineColor || style.lineColor, 1), // Prioriza inline
-                        strokeOpacity: 1.0,
+                        strokeColor: kmlColorToCss(inlineLineColor || style.lineColor), // Prioriza inline
+                        strokeOpacity: 1.0, // Opacidade está na cor KML
                         strokeWeight: parseInt(inlineLineWidth || style.lineWidth || '4'), // Prioriza inline
                         map: map
                     });
@@ -214,39 +215,40 @@
              // --- Processamento de Polígono (Polygon) ---
             if (polygon) {
                 const path = parseCoordinates(polygon.textContent);
-                if (path.length > 0) {
-                    // Define cores padrão ou busca nos estilos/inline
-                    let polyFillColor = inlinePolyColor || style.polyColor; // Prioriza inline
-                    let polyStrokeColor = inlinePolyOutlineColor || inlineLineColor || style.lineColor || polyFillColor; // Várias prioridades
+                 if (path.length > 0) {
+                    // Define cores e estilos padrão ou busca nos estilos/inline
+                    let polyFillColorKML = inlinePolyColor || style.polyColor; // Prioriza inline
+                    // Define cor do contorno: Usa LineStyle se houver, senão usa PolyStyle se outline=1, senão usa FillColor
+                    let polyStrokeColorKML = inlineLineColor || style.lineColor || (inlinePolyOutline === '1' || style.polyOutline === '1' ? polyFillColorKML : null);
                     let polyStrokeWidth = parseInt(inlineLineWidth || style.lineWidth || '1');
+                    let polyFill = inlinePolyFill !== '0'; // Se '0' é não preencher, senão preenche
+                    let polyOutline = inlinePolyOutline !== '0'; // Se '0' é sem contorno, senão tem contorno
 
-                    // *** MUDANÇA AQUI: Estilo específico para Áreas de Risco ***
-                    let finalFillOpacity = 1; // Opacidade está na cor KML por padrão
-                    let finalStrokeOpacity = 1;
+                    // *** ESTILO ESPECÍFICO PARA ÁREAS DE RISCO ***
+                    let isAreaDeRisco = (folderName === 'Áreas de Risco');
 
-                    if (folderName === 'Áreas de Risco') {
-                        finalFillOpacity = 0;   // Sem preenchimento (vazado)
-                        polyStrokeColor = 'FF0000'; // Vermelho puro KML (sem alpha)
-                        finalStrokeOpacity = 1; // Contorno opaco
-                        polyStrokeWidth = 2;    // Contorno um pouco mais grosso
-                        // A cor de preenchimento não importa com opacidade 0
-                    }
-                    // *** FIM DA MUDANÇA ***
-
-                    const shape = new google.maps.Polygon({
+                    const polygonOptions = {
                         paths: path,
-                        strokeColor: kmlColorToCss(polyStrokeColor, finalStrokeOpacity), // Aplica cor e opacidade do contorno
-                        strokeOpacity: 1, // A opacidade está na cor convertida
-                        strokeWeight: polyStrokeWidth,
-                        fillColor: kmlColorToCss(polyFillColor, 0.35), // Aplica cor de preenchimento (opacidade será ajustada)
-                        fillOpacity: finalFillOpacity, // Usa a opacidade final (0 para risco, padrão KML para outros)
+                        strokeColor: kmlColorToCss(polyStrokeColorKML, 1, isAreaDeRisco), // Passa flag para forçar vermelho
+                        strokeOpacity: 1, // Opacidade na cor convertida
+                        strokeWeight: isAreaDeRisco ? 2 : polyStrokeWidth, // Mais grosso para risco
+                        fillColor: kmlColorToCss(polyFillColorKML, 0.35), // Opacidade padrão baixa no preenchimento
+                        fillOpacity: isAreaDeRisco ? 0 : (polyFill ? 1 : 0), // Vazado para risco ou se fill=0
                         map: map
-                    });
+                    };
+
+                    // Se outline=0 no KML, remove o contorno (exceto se for Area de Risco)
+                    if (!polyOutline && !isAreaDeRisco) {
+                         polygonOptions.strokeWeight = 0;
+                         polygonOptions.strokeOpacity = 0;
+                    }
+
+                    const shape = new google.maps.Polygon(polygonOptions);
                     path.forEach(p => bounds.extend(p));
                 }
             }
         }
-        // --- FIM DA FUNÇÃO processPlacemark ---
+
 
         function parseCoordinates(coordsText) {
             // ...(função inalterada)...
@@ -261,23 +263,36 @@
             return path;
         }
 
-        function kmlColorToCss(kmlColor, defaultOpacity = 1) {
-            // ...(função inalterada)...
+        // --- FUNÇÃO kmlColorToCss MODIFICADA ---
+        function kmlColorToCss(kmlColor, defaultOpacity = 1, forceRedOutline = false) { // Novo parâmetro forceRedOutline
+            // KML usa ABGR (Alpha, Blue, Green, Red), CSS usa RGBA
+
+            // Se for para forçar contorno vermelho (Áreas de Risco)
+            if (forceRedOutline) {
+                return `rgba(255, 0, 0, ${defaultOpacity})`; // Vermelho puro com a opacidade desejada
+            }
+
+            // Se a cor KML for inválida ou ausente
             if (!kmlColor || typeof kmlColor !== 'string' || kmlColor.length !== 8) {
-                // Se a cor for inválida, MAS o defaultOpacity for 0 (para risco), retorna transparente
-                 if (defaultOpacity === 0) return `rgba(255,0,0,0)`; // Vermelho transparente
-                 return `rgba(0,0,255,${defaultOpacity})`; // Azul padrão
+                 if (defaultOpacity === 0) return `rgba(255,0,0,0)`; // Transparente se opacidade for 0
+                 return `rgba(0,0,255,${defaultOpacity})`; // Azul padrão caso contrário
             }
             try {
-                // KML usa ABGR, CSS usa RGBA
-                let a = parseInt(kmlColor.substring(0, 2), 16) / 255;
-                const b = parseInt(kmlColor.substring(2, 4), 16);
-                const g = parseInt(kmlColor.substring(4, 6), 16);
-                const r = parseInt(kmlColor.substring(6, 8), 16);
-                 // Se defaultOpacity for explicitamente 0, força a opacidade 0
-                 if(defaultOpacity === 0) a = 0;
-                 // Se não for 0, usa a opacidade do KML (ou 1 se KML não tiver opacidade definida implicitamente)
-                 else a = (kmlColor.substring(0, 2) === '00' && a === 0) ? 1 : a; // Hack para cores KML sem alfa (como FF0000)
+                let a = parseInt(kmlColor.substring(0, 2), 16) / 255; // Alpha
+                const b = parseInt(kmlColor.substring(2, 4), 16); // Blue
+                const g = parseInt(kmlColor.substring(4, 6), 16); // Green
+                const r = parseInt(kmlColor.substring(6, 8), 16); // Red
+
+                // Usa defaultOpacity SE a opacidade KML for 00 (totalmente transparente),
+                // OU se a opacidade desejada (defaultOpacity) for explicitamente 0.
+                if (kmlColor.substring(0, 2) === '00' || defaultOpacity === 0) {
+                     a = defaultOpacity;
+                }
+                // Garante opacidade 1 se o KML não especificar alpha (ex: só FF0000)
+                else if (a === 0 && kmlColor.substring(0,2) !== '00') {
+                    a = 1;
+                }
+
 
                 return `rgba(${r}, ${g}, ${b}, ${a})`;
             } catch (e) {
@@ -286,6 +301,7 @@
                  return `rgba(0,0,255,${defaultOpacity})`;
             }
         }
+        // --- FIM DA FUNÇÃO kmlColorToCss ---
 
         function showKmlInfo(kmlDoc) {
              // ...(função inalterada)...
@@ -295,7 +311,7 @@
         }
 
         function createLegend(kmlDoc) {
-             // ...(função inalterada, já correta da vez anterior)...
+             // ...(função inalterada)...
             const legendDiv = document.getElementById('legend');
             let legendHTML = '<h6>Legenda</h6>';
             const addedIcons = new Set();
