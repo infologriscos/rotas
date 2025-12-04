@@ -10,15 +10,20 @@
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; }
         .hidden { display: none; }
         #info-panel { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); max-width: 300px; z-index: 1000; }
-        #open-in-maps { margin-top: 10px; padding: 8px 12px; background-color: #4285F4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
+        
         /* Estilos para o balão de informação */
         .custom-info-window { max-width: 250px; line-height: 1.4; }
         .custom-info-window strong { display: block; margin-bottom: 3px; font-size: 1.1em; color: #333; } /* Título Categoria */
         .custom-info-window .point-name { font-weight: bold; color: #555;} /* Nome do Ponto */
+        
         /* Estilos para a legenda */
         #legend { position: absolute; bottom: 30px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; font-size: 12px; max-height: 40%; overflow-y: auto;}
         .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
         .legend-icon { width: 24px; height: 24px; margin-right: 8px; object-fit: contain;}
+        
+        /* Ícones geométricos CSS para legenda (Risco/Jammer) */
+        .legend-color-box { width: 20px; height: 20px; margin-right: 8px; border: 2px solid; display: inline-block; }
+        
         #legend h6 { margin-top: 0; margin-bottom: 8px; font-weight: bold; font-size: 13px; }
     </style>
 </head>
@@ -27,7 +32,6 @@
     <div id="loading">Carregando Rotograma...</div>
     <div id="info-panel" class="hidden">
         <div id="info-content"></div>
-        <button id="open-in-maps" class="hidden">Abrir Rota no App do Google Maps</button>
     </div>
     <div id="legend" class="hidden"><h6>Legenda</h6></div>
 
@@ -50,7 +54,6 @@
                 zoom: 4, center: { lat: -14.235, lng: -51.925 }, mapTypeControl: false, streetViewControl: false
             });
 
-            document.getElementById('open-in-maps').addEventListener('click', openRouteInGoogleMaps);
             loadKml(kmlUrl, map);
         }
 
@@ -185,10 +188,10 @@
 
                 // Adiciona folderName ao InfoWindow
                 const infoWindowContent = `<div class="custom-info-window">
-                                             <strong>${folderName}</strong>
-                                             <div class="point-name">${name}</div>
-                                             ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
-                                           </div>`;
+                                                <strong>${folderName}</strong>
+                                                <div class="point-name">${name}</div>
+                                                ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
+                                              </div>`;
                 const infoWindow = new google.maps.InfoWindow({ content: infoWindowContent });
                 marker.addListener('click', () => infoWindow.open(map, marker));
                 bounds.extend(latLng);
@@ -208,7 +211,7 @@
                         map: map
                     });
                     path.forEach(p => bounds.extend(p));
-                    document.getElementById('open-in-maps').classList.remove('hidden');
+                    // REMOVIDO: Botão de abrir no Google Maps
                 }
             }
 
@@ -225,18 +228,20 @@
 
                     // ESTILO ESPECÍFICO PARA ÁREAS DE RISCO
                     let isAreaDeRisco = (folderName === 'Áreas de Risco');
+                    // ESTILO ESPECÍFICO PARA ÁREAS DE JAMMER
+                    let isAreaDeJammer = (folderName === 'Áreas de Jammer' || folderName === 'Presídios');
 
                     const polygonOptions = {
                         paths: path,
                         strokeColor: kmlColorToCss(polyStrokeColorKML, 1, isAreaDeRisco), // Passa flag para forçar vermelho
                         strokeOpacity: 1, // Opacidade na cor convertida
-                        strokeWeight: isAreaDeRisco ? 2 : polyStrokeWidth, // Mais grosso para risco
+                        strokeWeight: isAreaDeRisco ? 2 : (isAreaDeJammer ? 2 : polyStrokeWidth), 
                         fillColor: kmlColorToCss(polyFillColorKML, 0.35), // Opacidade padrão baixa no preenchimento
-                        fillOpacity: isAreaDeRisco ? 0 : (polyFill ? 1 : 0), // Vazado para risco ou se fill=0
+                        fillOpacity: isAreaDeRisco || isAreaDeJammer ? 0 : (polyFill ? 1 : 0), // Vazado para risco/jammer ou se fill=0
                         map: map
                     };
 
-                    if (!polyOutline && !isAreaDeRisco) {
+                    if (!polyOutline && !isAreaDeRisco && !isAreaDeJammer) {
                          polygonOptions.strokeWeight = 0;
                          polygonOptions.strokeOpacity = 0;
                     }
@@ -247,10 +252,10 @@
                     if (shape) { // Garante que o polígono foi criado
                         // Usa o nome da pasta e o nome do Placemark (que deve ser Cidade, Estado)
                         const infoWindowContent = `<div class="custom-info-window">
-                                                     <strong>${folderName}</strong>
-                                                     <div class="point-name">${name}</div>
-                                                     ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
-                                                   </div>`;
+                                                      <strong>${folderName}</strong>
+                                                      <div class="point-name">${name}</div>
+                                                      ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
+                                                    </div>`;
                         const infoWindow = new google.maps.InfoWindow({ content: infoWindowContent });
 
                         // Adiciona um listener de clique ao polígono
@@ -280,7 +285,7 @@
             return path;
         }
 
-        // --- FUNÇÃO kmlColorToCss MODIFICADA ---
+        // --- FUNÇÃO kmlColorToCss ---
         function kmlColorToCss(kmlColor, defaultOpacity = 1, forceRedOutline = false) { // Novo parâmetro forceRedOutline
             // KML usa ABGR (Alpha, Blue, Green, Red), CSS usa RGBA
 
@@ -327,78 +332,80 @@
             document.getElementById('info-panel').classList.remove('hidden');
         }
 
-        // --- FUNÇÃO DA LEGENDA ATUALIZADA COM CONTAGEM ---
+        // --- FUNÇÃO DA LEGENDA ATUALIZADA ---
         function createLegend(kmlDoc) {
             const legendDiv = document.getElementById('legend');
-            let legendHTML = '<h6>Legenda</h6>'; // Reinicia com o título
-            const iconCounts = {}; // Objeto para armazenar contagens {iconHref: { name: 'Nome Pasta', count: 0 }}
-            let totalIconsAdded = 0; // Contador geral para saber se a legenda deve ser exibida
+            let legendHTML = '<h6>Legenda</h6>'; 
+            const legendItems = {}; // Usar objeto para evitar duplicatas por nome de pasta
+            let hasItems = false;
 
-            // Re-extrai os estilos para garantir que temos a referência correta
             const styles = extractStyles(kmlDoc);
-
-            // Seleciona todas as Pastas (Folders) dentro do Documento KML
             const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
 
             kmlFolders.forEach(folder => {
-                // Pega o nome da Pasta (Folder)
-                const folderName = folder.querySelector('name')?.textContent || 'Tipo Desconhecido';
+                const folderName = folder.querySelector('name')?.textContent || 'Outros';
+                
+                // Ignora pastas de estrutura interna do KML que não sejam dados (ex: Origem/Destino/Trajeto se não quiser na legenda)
+                // Se quiser esconder "Trajeto" da legenda, descomente abaixo:
+                // if (folderName === 'Trajeto' || folderName === 'Origem' || folderName === 'Destino') return;
 
-                // Seleciona TODOS os Placemarks com Ponto dentro desta pasta
-                const placemarksInFolder = folder.querySelectorAll('Placemark > Point');
+                // Tenta achar um ícone dentro da pasta
+                let iconUrl = null;
+                let isGeometry = false;
+                let geometryColor = 'gray'; // Cor padrão para geometria
 
-                // Itera sobre cada ponto encontrado na pasta
-                placemarksInFolder.forEach(pointElement => {
-                    const placemark = pointElement.closest('Placemark'); // Pega o Placemark pai
-                    if (!placemark) return;
-
-                    // Pega a URL do estilo usada por este Placemark
-                    const styleUrl = placemark.querySelector('styleUrl')?.textContent;
-
-                    // Busca o ícone correspondente nos estilos extraídos
+                // 1. Procura Placemarks com Ponto (Ícones)
+                const placemarkPoint = folder.querySelector('Placemark > Point');
+                if (placemarkPoint) {
+                    const pm = placemarkPoint.closest('Placemark');
+                    const styleUrl = pm.querySelector('styleUrl')?.textContent;
                     if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
-                        const iconHref = styles[styleUrl].iconHref;
-
-                        // Se este ícone ainda não foi visto, inicializa a contagem
-                        if (!iconCounts[iconHref]) {
-                            iconCounts[iconHref] = { name: folderName, count: 0 };
-                        }
-                        // Incrementa a contagem para este ícone
-                        iconCounts[iconHref].count += 1;
+                        iconUrl = styles[styleUrl].iconHref;
+                    } else {
+                        // Ícone padrão Google se não tiver estilo definido
+                        iconUrl = 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'; 
                     }
-                     else {
-                         // Opcional: Contar pontos sem ícone definido (usará ícone padrão do Google Maps)
-                         const defaultIconKey = 'default_google_icon';
-                         if (!iconCounts[defaultIconKey]) {
-                             iconCounts[defaultIconKey] = { name: 'Outros Pontos (Padrão)', count: 0 };
-                         }
-                         iconCounts[defaultIconKey].count += 1;
-                         console.warn(`Placemark em "${folderName}" sem ícone definido.`);
-                     }
-                });
+                } 
+                // 2. Se não achou ponto, procura Polígonos (Áreas)
+                else {
+                    const placemarkPoly = folder.querySelector('Placemark > Polygon') || folder.querySelector('Placemark > LineString'); // Considera linha tb
+                    if (placemarkPoly) {
+                        isGeometry = true;
+                        if (folderName === 'Áreas de Risco') geometryColor = 'red';
+                        else if (folderName === 'Áreas de Jammer' || folderName === 'Presídios') geometryColor = 'gray';
+                        else if (folderName === 'Trajeto') geometryColor = 'blue';
+                        else geometryColor = 'black'; // Default
+                    }
+                }
+
+                // Adiciona ao objeto de itens da legenda se tivermos algo para mostrar
+                if (iconUrl || isGeometry) {
+                    legendItems[folderName] = { icon: iconUrl, isGeometry: isGeometry, color: geometryColor };
+                    hasItems = true;
+                }
             });
 
-            // Agora, constrói o HTML da legenda a partir das contagens
-            for (const iconHref in iconCounts) {
-                const item = iconCounts[iconHref];
-                 // Decide qual imagem mostrar (ícone específico ou um placeholder para o padrão)
-                 const imgSrc = (iconHref === 'default_google_icon')
-                    ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' // Ícone padrão vermelho do Google
-                    : iconHref; // URL do seu ícone customizado
-
+            // Constrói o HTML
+            for (const [name, data] of Object.entries(legendItems)) {
+                let iconHTML = '';
+                if (data.isGeometry) {
+                    // Cria um quadrado colorido para representar a área/linha
+                    iconHTML = `<span class="legend-color-box" style="border-color: ${data.color};"></span>`;
+                } else {
+                    iconHTML = `<img src="${data.icon}" class="legend-icon" alt="${name}">`;
+                }
+                
                 legendHTML += `<div class="legend-item">
-                                 <img src="${imgSrc}" class="legend-icon" alt="${item.name}">
-                                 <span>${item.name} (${item.count})</span>
+                                ${iconHTML}
+                                <span>${name}</span>
                                </div>`;
-                totalIconsAdded++; // Incrementa contador geral
             }
 
-            // Se pelo menos um tipo de ícone foi contado...
-            if (totalIconsAdded > 0) {
-                legendDiv.innerHTML = legendHTML; // Atualiza o conteúdo HTML da div da legenda
-                legendDiv.classList.remove('hidden'); // Torna a legenda visível
+            if (hasItems) {
+                legendDiv.innerHTML = legendHTML;
+                legendDiv.classList.remove('hidden');
             } else {
-                 legendDiv.classList.add('hidden'); // Garante que a legenda fique escondida se nada for adicionado
+                legendDiv.classList.add('hidden');
             }
         }
         
@@ -406,17 +413,6 @@
              // ...(função inalterada)...
             document.getElementById('loading').classList.add('hidden');
             document.getElementById('map').innerHTML = `<div style="text-align: center; padding: 50px; font-size: 18px; color: red;">${message}</div>`;
-        }
-
-        function openRouteInGoogleMaps() {
-             // ...(função inalterada)...
-             if (routeWaypoints.length < 2) { alert("A rota precisa de pelo menos dois pontos."); return; }
-             const origin = `${routeWaypoints[0].lat},${routeWaypoints[0].lng}`;
-             const destination = `${routeWaypoints[routeWaypoints.length - 1].lat},${routeWaypoints[routeWaypoints.length - 1].lng}`;
-             const waypoints = routeWaypoints.slice(1, -1).map(p => `${p.lat},${p.lng}`).join('|');
-             let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
-             if (waypoints) { url += `&waypoints=${waypoints}`; }
-             window.open(url, '_blank');
         }
 
     </script>
