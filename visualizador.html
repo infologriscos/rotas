@@ -21,8 +21,8 @@
         .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
         .legend-icon { width: 24px; height: 24px; margin-right: 8px; object-fit: contain;}
         
-        /* Ícones geométricos CSS para legenda (Risco/Jammer) */
-        .legend-color-box { width: 20px; height: 20px; margin-right: 8px; border: 2px solid; display: inline-block; }
+        /* Ícones geométricos CSS para legenda (Risco/Jammer) - ALTERADO PARA CÍRCULO */
+        .legend-color-box { width: 18px; height: 18px; margin-right: 8px; border: 3px solid; border-radius: 50%; display: inline-block; background: transparent; }
         
         #legend h6 { margin-top: 0; margin-bottom: 8px; font-weight: bold; font-size: 13px; }
     </style>
@@ -346,8 +346,8 @@
                 const folderName = folder.querySelector('name')?.textContent || 'Outros';
                 
                 // Ignora pastas de estrutura interna do KML que não sejam dados (ex: Origem/Destino/Trajeto se não quiser na legenda)
-                // Se quiser esconder "Trajeto" da legenda, descomente abaixo:
-                // if (folderName === 'Trajeto' || folderName === 'Origem' || folderName === 'Destino') return;
+                // MODIFICADO: Remove "Trajeto" da legenda conforme pedido
+                if (folderName === 'Trajeto' || folderName === 'Origem' || folderName === 'Destino') return;
 
                 // Tenta achar um ícone dentro da pasta
                 let iconUrl = null;
