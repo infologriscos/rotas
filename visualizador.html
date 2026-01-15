@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Visualizador de Rotograma</title>
+    <title>Visualizador de Rotograma GPS</title>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="utf-8">
     <style>
@@ -13,18 +13,39 @@
         
         /* Estilos para o balão de informação */
         .custom-info-window { max-width: 250px; line-height: 1.4; }
-        .custom-info-window strong { display: block; margin-bottom: 3px; font-size: 1.1em; color: #333; } /* Título Categoria */
-        .custom-info-window .point-name { font-weight: bold; color: #555;} /* Nome do Ponto */
+        .custom-info-window strong { display: block; margin-bottom: 3px; font-size: 1.1em; color: #333; }
+        .custom-info-window .point-name { font-weight: bold; color: #555;}
         
         /* Estilos para a legenda */
         #legend { position: absolute; bottom: 30px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; font-size: 12px; max-height: 40%; overflow-y: auto;}
         .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
         .legend-icon { width: 24px; height: 24px; margin-right: 8px; object-fit: contain;}
-        
-        /* Ícones geométricos CSS para legenda (Risco/Jammer) - ALTERADO PARA CÍRCULO */
         .legend-color-box { width: 18px; height: 18px; margin-right: 8px; border: 3px solid; border-radius: 50%; display: inline-block; background: transparent; }
-        
         #legend h6 { margin-top: 0; margin-bottom: 8px; font-weight: bold; font-size: 13px; }
+
+        /* --- NOVO: Estilo do Botão de GPS --- */
+        .custom-map-control-button {
+            background-color: #fff;
+            border: 0;
+            border-radius: 2px;
+            box-shadow: 0 1px 4px -1px rgba(0,0,0,0.3);
+            margin: 10px;
+            padding: 0;
+            position: absolute;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            overflow: hidden;
+            top: 10px; 
+            right: 10px; /* Canto superior direito */
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .custom-map-control-button:hover { background-color: #ebebeb; }
+        .gps-icon-svg { width: 24px; height: 24px; fill: #666; }
+        .gps-active .gps-icon-svg { fill: #4285F4; } /* Azul quando ativo */
     </style>
 </head>
 <body>
@@ -40,6 +61,11 @@
         let map;
         let routeWaypoints = [];
         let kmlDocumentGlobal = null;
+        
+        // --- NOVAS VARIÁVEIS PARA NAVEGAÇÃO ---
+        let userMarker = null;
+        let watchId = null;
+        let isTracking = false;
 
         function initMap() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -51,11 +77,130 @@
             }
 
             map = new google.maps.Map(document.getElementById('map'), {
-                zoom: 4, center: { lat: -14.235, lng: -51.925 }, mapTypeControl: false, streetViewControl: false
+                zoom: 4, 
+                center: { lat: -14.235, lng: -51.925 }, 
+                mapTypeControl: false, 
+                streetViewControl: false,
+                fullscreenControl: false // Remove botão de tela cheia padrão para limpar a tela
             });
+
+            // --- NOVO: Adiciona o botão de localização ---
+            addYourLocationButton(map);
 
             loadKml(kmlUrl, map);
         }
+
+        // --- NOVA FUNÇÃO: Cria o botão e a lógica de GPS ---
+        function addYourLocationButton(map) {
+            const controlDiv = document.createElement("div");
+            controlDiv.className = "custom-map-control-button";
+            controlDiv.title = "Onde estou?";
+            
+            // Ícone de mira (Target)
+            controlDiv.innerHTML = `
+                <svg class="gps-icon-svg" viewBox="0 0 24 24">
+                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+                </svg>
+            `;
+
+            // Adiciona o botão ao mapa (Topo à Direita)
+            map.controls[google.maps.ControlPosition.RIGHT_TOP].push(controlDiv);
+
+            controlDiv.addEventListener("click", () => {
+                if (navigator.geolocation) {
+                    toggleTracking(map, controlDiv);
+                } else {
+                    alert("Seu navegador não suporta geolocalização.");
+                }
+            });
+        }
+
+        // --- NOVA FUNÇÃO: Liga/Desliga o rastreamento ---
+        function toggleTracking(map, button) {
+            if (isTracking) {
+                // Parar rastreamento
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                isTracking = false;
+                button.classList.remove("gps-active");
+            } else {
+                // Iniciar rastreamento
+                // Pede permissão e começa a assistir a posição
+                watchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        const pos = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                        };
+
+                        // Cria o marcador se não existir (Bolinha Azul)
+                        if (!userMarker) {
+                            userMarker = new google.maps.Marker({
+                                position: pos,
+                                map: map,
+                                title: "Você está aqui",
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    scale: 8,
+                                    fillColor: "#4285F4",
+                                    fillOpacity: 1,
+                                    strokeColor: "white",
+                                    strokeWeight: 2,
+                                },
+                                zIndex: 9999 // Fica por cima de tudo
+                            });
+                            
+                            // Círculo de precisão (opcional, visualmente legal)
+                            new google.maps.Circle({
+                                strokeColor: "#4285F4",
+                                strokeOpacity: 0.3,
+                                strokeWeight: 1,
+                                fillColor: "#4285F4",
+                                fillOpacity: 0.1,
+                                map: map,
+                                center: pos,
+                                radius: position.coords.accuracy, // Precisão em metros
+                            });
+                        } else {
+                            userMarker.setPosition(pos);
+                        }
+
+                        // Centraliza o mapa na posição do motorista
+                        map.setCenter(pos);
+                        
+                        // Se estiver muito longe (zoom out), aproxima. Se já estiver perto, mantém o zoom do usuário.
+                        if (map.getZoom() < 14) {
+                            map.setZoom(15);
+                        }
+
+                        isTracking = true;
+                        button.classList.add("gps-active");
+                    },
+                    (error) => {
+                        handleLocationError(true, map.getCenter());
+                        button.classList.remove("gps-active");
+                        isTracking = false;
+                    },
+                    {
+                        enableHighAccuracy: true, // Usa GPS real
+                        maximumAge: 0, // Não usa cache
+                        timeout: 10000 // Timeout de 10s
+                    }
+                );
+            }
+        }
+
+        function handleLocationError(browserHasGeolocation, pos) {
+            alert(
+                browserHasGeolocation
+                    ? "Erro: O serviço de geolocalização falhou (Verifique se o GPS está ativo e se o site é HTTPS)."
+                    : "Erro: Seu navegador não suporta geolocalização."
+            );
+        }
+
+        // --- FIM DAS FUNÇÕES NOVAS ---
 
         function loadKml(kmlUrl, map) {
             const loadingDiv = document.getElementById('loading');
@@ -91,14 +236,12 @@
             const bounds = new google.maps.LatLngBounds();
             routeWaypoints = [];
 
-            // Iterar por Pastas (Folders) primeiro
             const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
             kmlFolders.forEach(folder => {
                 const folderName = folder.querySelector('name')?.textContent || 'Sem Categoria';
                 const placemarksInFolder = folder.querySelectorAll('Placemark');
 
                 placemarksInFolder.forEach(placemark => {
-                    // Passa o nome da pasta para processPlacemark
                     processPlacemark(placemark, folderName, styles, map, bounds);
                 });
             });
@@ -115,10 +258,8 @@
             return kmlDoc;
         }
 
-
         function extractStyles(kmlDoc) {
             const styles = {};
-            // Tenta buscar StyleMap primeiro
             const styleMapElements = kmlDoc.getElementsByTagName('StyleMap');
             for (let i = 0; i < styleMapElements.length; i++) {
                 const id = '#' + styleMapElements[i].getAttribute('id');
@@ -128,7 +269,6 @@
                          const normalStyle = kmlDoc.querySelector(`Style[id="${normalStyleUrl.substring(1)}"]`);
                          if (normalStyle) {
                              const iconHref = normalStyle.querySelector('IconStyle > Icon > href')?.textContent;
-                             // Adiciona também cores/largura do Style normal para referência futura
                              const lineColor = normalStyle.querySelector('LineStyle > color')?.textContent;
                              const lineWidth = normalStyle.querySelector('LineStyle > width')?.textContent;
                              const polyColor = normalStyle.querySelector('PolyStyle > color')?.textContent;
@@ -137,143 +277,104 @@
                     }
                 }
             }
-            // Busca Styles simples
             const styleElements = kmlDoc.getElementsByTagName('Style');
             for (let i = 0; i < styleElements.length; i++) {
                 const id = '#' + styleElements[i].getAttribute('id');
-                if (id && !styles[id]) { // Só adiciona se não foi pego pelo StyleMap
+                if (id && !styles[id]) {
                     const iconHref = styleElements[i].querySelector('IconStyle > Icon > href')?.textContent;
                     const lineColor = styleElements[i].querySelector('LineStyle > color')?.textContent;
                     const lineWidth = styleElements[i].querySelector('LineStyle > width')?.textContent;
                     const polyColor = styleElements[i].querySelector('PolyStyle > color')?.textContent;
-                    // Adiciona mesmo se não tiver ícone, pois pode ser estilo de linha/polígono
                     styles[id] = { iconHref, lineColor, lineWidth, polyColor };
                 }
             }
             return styles;
         }
 
-        // Adicionado parâmetro folderName
         function processPlacemark(placemark, folderName, styles, map, bounds) {
             const name = placemark.querySelector('name')?.textContent || '';
             const description = placemark.querySelector('description')?.textContent || '';
             const styleUrl = placemark.querySelector('styleUrl')?.textContent || '';
-            const style = styles[styleUrl] || {}; // Estilo referenciado
+            const style = styles[styleUrl] || {};
 
-            // Cores e larguras que podem ser definidas inline no Placemark
             const inlineLineColor = placemark.querySelector('LineStyle > color')?.textContent;
             const inlineLineWidth = placemark.querySelector('LineStyle > width')?.textContent;
             const inlinePolyColor = placemark.querySelector('PolyStyle > color')?.textContent;
-            const inlinePolyOutline = placemark.querySelector('PolyStyle > outline')?.textContent; // '1' ou '0'
-            const inlinePolyFill = placemark.querySelector('PolyStyle > fill')?.textContent; // '1' ou '0'
-
+            const inlinePolyOutline = placemark.querySelector('PolyStyle > outline')?.textContent;
+            const inlinePolyFill = placemark.querySelector('PolyStyle > fill')?.textContent;
 
             const point = placemark.querySelector('Point > coordinates');
             const lineString = placemark.querySelector('LineString > coordinates');
             const polygon = placemark.querySelector('Polygon > outerBoundaryIs > LinearRing > coordinates');
 
-            // --- Processamento de Ponto (Marker) ---
             if (point) {
                 const coords = point.textContent.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) {
-                    console.warn(`Coordenadas inválidas para o ponto "${name}" em "${folderName}":`, point.textContent);
-                    return;
-                }
+                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) { return; }
                 const latLng = new google.maps.LatLng(coords[1], coords[0]);
                 const markerOptions = { position: latLng, map: map, title: name };
                 if (style.iconHref) {
                     markerOptions.icon = { url: style.iconHref, scaledSize: new google.maps.Size(24, 24) };
                 }
                 const marker = new google.maps.Marker(markerOptions);
-
-                // Adiciona folderName ao InfoWindow
-                const infoWindowContent = `<div class="custom-info-window">
-                                                <strong>${folderName}</strong>
-                                                <div class="point-name">${name}</div>
-                                                ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
-                                              </div>`;
+                const infoWindowContent = `<div class="custom-info-window"><strong>${folderName}</strong><div class="point-name">${name}</div>${description ? `<hr style="margin: 3px 0;">${description}` : ''}</div>`;
                 const infoWindow = new google.maps.InfoWindow({ content: infoWindowContent });
                 marker.addListener('click', () => infoWindow.open(map, marker));
                 bounds.extend(latLng);
             }
 
-            // --- Processamento de Linha (Polyline) ---
             if (lineString) {
                 const path = parseCoordinates(lineString.textContent);
                 if (path.length > 0) {
                     routeWaypoints = path.slice();
-                    const polyline = new google.maps.Polyline({
-                        path: path,
-                        geodesic: true,
-                        strokeColor: kmlColorToCss(inlineLineColor || style.lineColor), // Prioriza inline
-                        strokeOpacity: 1.0, // Opacidade está na cor KML
-                        strokeWeight: parseInt(inlineLineWidth || style.lineWidth || '4'), // Prioriza inline
+                    new google.maps.Polyline({
+                        path: path, geodesic: true,
+                        strokeColor: kmlColorToCss(inlineLineColor || style.lineColor),
+                        strokeOpacity: 1.0,
+                        strokeWeight: parseInt(inlineLineWidth || style.lineWidth || '4'),
                         map: map
                     });
                     path.forEach(p => bounds.extend(p));
-                    // REMOVIDO: Botão de abrir no Google Maps
                 }
             }
 
-             // --- Processamento de Polígono (Polygon) ---
             if (polygon) {
                 const path = parseCoordinates(polygon.textContent);
                  if (path.length > 0) {
-                    // Define cores e estilos padrão ou busca nos estilos/inline
-                    let polyFillColorKML = inlinePolyColor || style.polyColor; // Prioriza inline
+                    let polyFillColorKML = inlinePolyColor || style.polyColor;
                     let polyStrokeColorKML = inlineLineColor || style.lineColor || (inlinePolyOutline === '1' || style.polyOutline === '1' ? polyFillColorKML : null);
                     let polyStrokeWidth = parseInt(inlineLineWidth || style.lineWidth || '1');
                     let polyFill = inlinePolyFill !== '0';
                     let polyOutline = inlinePolyOutline !== '0';
-
-                    // ESTILO ESPECÍFICO PARA ÁREAS DE RISCO
                     let isAreaDeRisco = (folderName === 'Áreas de Risco');
-                    // ESTILO ESPECÍFICO PARA ÁREAS DE JAMMER
                     let isAreaDeJammer = (folderName === 'Áreas de Jammer' || folderName === 'Presídios');
 
                     const polygonOptions = {
                         paths: path,
-                        strokeColor: kmlColorToCss(polyStrokeColorKML, 1, isAreaDeRisco), // Passa flag para forçar vermelho
-                        strokeOpacity: 1, // Opacidade na cor convertida
+                        strokeColor: kmlColorToCss(polyStrokeColorKML, 1, isAreaDeRisco),
+                        strokeOpacity: 1,
                         strokeWeight: isAreaDeRisco ? 2 : (isAreaDeJammer ? 2 : polyStrokeWidth), 
-                        fillColor: kmlColorToCss(polyFillColorKML, 0.35), // Opacidade padrão baixa no preenchimento
-                        fillOpacity: isAreaDeRisco || isAreaDeJammer ? 0 : (polyFill ? 1 : 0), // Vazado para risco/jammer ou se fill=0
+                        fillColor: kmlColorToCss(polyFillColorKML, 0.35),
+                        fillOpacity: isAreaDeRisco || isAreaDeJammer ? 0 : (polyFill ? 1 : 0),
                         map: map
                     };
-
                     if (!polyOutline && !isAreaDeRisco && !isAreaDeJammer) {
-                         polygonOptions.strokeWeight = 0;
-                         polygonOptions.strokeOpacity = 0;
+                         polygonOptions.strokeWeight = 0; polygonOptions.strokeOpacity = 0;
                     }
-
                     const shape = new google.maps.Polygon(polygonOptions);
-
-                    // --- ADICIONADO: InfoWindow para Polígonos ---
-                    if (shape) { // Garante que o polígono foi criado
-                        // Usa o nome da pasta e o nome do Placemark (que deve ser Cidade, Estado)
-                        const infoWindowContent = `<div class="custom-info-window">
-                                                      <strong>${folderName}</strong>
-                                                      <div class="point-name">${name}</div>
-                                                      ${description ? `<hr style="margin: 3px 0;">${description}` : ''}
-                                                    </div>`;
+                    if (shape) {
+                        const infoWindowContent = `<div class="custom-info-window"><strong>${folderName}</strong><div class="point-name">${name}</div>${description ? `<hr style="margin: 3px 0;">${description}` : ''}</div>`;
                         const infoWindow = new google.maps.InfoWindow({ content: infoWindowContent });
-
-                        // Adiciona um listener de clique ao polígono
                         google.maps.event.addListener(shape, 'click', function(event) {
-                            // Define a posição do InfoWindow para onde o usuário clicou dentro do polígono
                             infoWindow.setPosition(event.latLng);
-                            infoWindow.open(map); // Abre no mapa (não associado a um marcador)
+                            infoWindow.open(map);
                         });
                     }
-
                     path.forEach(p => bounds.extend(p));
                 }
             }
         }
 
-
         function parseCoordinates(coordsText) {
-            // ...(função inalterada)...
             const pairs = coordsText.trim().split(/\s+/);
             const path = [];
             pairs.forEach(pair => {
@@ -285,76 +386,47 @@
             return path;
         }
 
-        // --- FUNÇÃO kmlColorToCss ---
-        function kmlColorToCss(kmlColor, defaultOpacity = 1, forceRedOutline = false) { // Novo parâmetro forceRedOutline
-            // KML usa ABGR (Alpha, Blue, Green, Red), CSS usa RGBA
-
-            // Se for para forçar contorno vermelho (Áreas de Risco)
-            if (forceRedOutline) {
-                return `rgba(255, 0, 0, ${defaultOpacity})`; // Vermelho puro com a opacidade desejada
-            }
-
-            // Se a cor KML for inválida ou ausente
+        function kmlColorToCss(kmlColor, defaultOpacity = 1, forceRedOutline = false) {
+            if (forceRedOutline) { return `rgba(255, 0, 0, ${defaultOpacity})`; }
             if (!kmlColor || typeof kmlColor !== 'string' || kmlColor.length !== 8) {
-                 if (defaultOpacity === 0) return `rgba(255,0,0,0)`; // Transparente se opacidade for 0
-                 return `rgba(0,0,255,${defaultOpacity})`; // Azul padrão caso contrário
+                 if (defaultOpacity === 0) return `rgba(255,0,0,0)`;
+                 return `rgba(0,0,255,${defaultOpacity})`;
             }
             try {
-                let a = parseInt(kmlColor.substring(0, 2), 16) / 255; // Alpha
-                const b = parseInt(kmlColor.substring(2, 4), 16); // Blue
-                const g = parseInt(kmlColor.substring(4, 6), 16); // Green
-                const r = parseInt(kmlColor.substring(6, 8), 16); // Red
-
-                // Usa defaultOpacity SE a opacidade KML for 00 (totalmente transparente),
-                // OU se a opacidade desejada (defaultOpacity) for explicitamente 0.
-                if (kmlColor.substring(0, 2) === '00' || defaultOpacity === 0) {
-                     a = defaultOpacity;
-                }
-                // Garante opacidade 1 se o KML não especificar alpha (ex: só FF0000)
-                else if (a === 0 && kmlColor.substring(0,2) !== '00') {
-                    a = 1;
-                }
-
-
+                let a = parseInt(kmlColor.substring(0, 2), 16) / 255;
+                const b = parseInt(kmlColor.substring(2, 4), 16);
+                const g = parseInt(kmlColor.substring(4, 6), 16);
+                const r = parseInt(kmlColor.substring(6, 8), 16);
+                if (kmlColor.substring(0, 2) === '00' || defaultOpacity === 0) { a = defaultOpacity; }
+                else if (a === 0 && kmlColor.substring(0,2) !== '00') { a = 1; }
                 return `rgba(${r}, ${g}, ${b}, ${a})`;
             } catch (e) {
-                console.error("Erro ao converter cor KML:", kmlColor, e);
                  if (defaultOpacity === 0) return `rgba(255,0,0,0)`;
                  return `rgba(0,0,255,${defaultOpacity})`;
             }
         }
-        // --- FIM DA FUNÇÃO kmlColorToCss ---
 
         function showKmlInfo(kmlDoc) {
-             // ...(função inalterada)...
             const name = kmlDoc.querySelector('Document > name')?.textContent || 'Rotograma';
             document.getElementById('info-content').innerHTML = `<strong>${name}</strong>`;
             document.getElementById('info-panel').classList.remove('hidden');
         }
 
-        // --- FUNÇÃO DA LEGENDA ATUALIZADA ---
         function createLegend(kmlDoc) {
             const legendDiv = document.getElementById('legend');
             let legendHTML = '<h6>Legenda</h6>'; 
-            const legendItems = {}; // Usar objeto para evitar duplicatas por nome de pasta
+            const legendItems = {};
             let hasItems = false;
-
             const styles = extractStyles(kmlDoc);
             const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
 
             kmlFolders.forEach(folder => {
                 const folderName = folder.querySelector('name')?.textContent || 'Outros';
-                
-                // Ignora pastas de estrutura interna do KML que não sejam dados (ex: Origem/Destino/Trajeto se não quiser na legenda)
-                // MODIFICADO: Remove "Trajeto" da legenda conforme pedido
                 if (folderName === 'Trajeto' || folderName === 'Origem' || folderName === 'Destino') return;
-
-                // Tenta achar um ícone dentro da pasta
                 let iconUrl = null;
                 let isGeometry = false;
-                let geometryColor = 'gray'; // Cor padrão para geometria
+                let geometryColor = 'gray';
 
-                // 1. Procura Placemarks com Ponto (Ícones)
                 const placemarkPoint = folder.querySelector('Placemark > Point');
                 if (placemarkPoint) {
                     const pm = placemarkPoint.closest('Placemark');
@@ -362,45 +434,33 @@
                     if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
                         iconUrl = styles[styleUrl].iconHref;
                     } else {
-                        // Ícone padrão Google se não tiver estilo definido
-                        iconUrl = 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'; 
+                        iconUrl = 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'; 
                     }
-                } 
-                // 2. Se não achou ponto, procura Polígonos (Áreas)
-                else {
-                    const placemarkPoly = folder.querySelector('Placemark > Polygon') || folder.querySelector('Placemark > LineString'); // Considera linha tb
+                } else {
+                    const placemarkPoly = folder.querySelector('Placemark > Polygon') || folder.querySelector('Placemark > LineString');
                     if (placemarkPoly) {
                         isGeometry = true;
                         if (folderName === 'Áreas de Risco') geometryColor = 'red';
                         else if (folderName === 'Áreas de Jammer' || folderName === 'Presídios') geometryColor = 'gray';
                         else if (folderName === 'Trajeto') geometryColor = 'blue';
-                        else geometryColor = 'black'; // Default
+                        else geometryColor = 'black';
                     }
                 }
-
-                // Adiciona ao objeto de itens da legenda se tivermos algo para mostrar
                 if (iconUrl || isGeometry) {
                     legendItems[folderName] = { icon: iconUrl, isGeometry: isGeometry, color: geometryColor };
                     hasItems = true;
                 }
             });
 
-            // Constrói o HTML
             for (const [name, data] of Object.entries(legendItems)) {
                 let iconHTML = '';
                 if (data.isGeometry) {
-                    // Cria um quadrado colorido para representar a área/linha
                     iconHTML = `<span class="legend-color-box" style="border-color: ${data.color};"></span>`;
                 } else {
                     iconHTML = `<img src="${data.icon}" class="legend-icon" alt="${name}">`;
                 }
-                
-                legendHTML += `<div class="legend-item">
-                                ${iconHTML}
-                                <span>${name}</span>
-                               </div>`;
+                legendHTML += `<div class="legend-item">${iconHTML}<span>${name}</span></div>`;
             }
-
             if (hasItems) {
                 legendDiv.innerHTML = legendHTML;
                 legendDiv.classList.remove('hidden');
@@ -410,7 +470,6 @@
         }
         
         function showError(message) {
-             // ...(função inalterada)...
             document.getElementById('loading').classList.add('hidden');
             document.getElementById('map').innerHTML = `<div style="text-align: center; padding: 50px; font-size: 18px; color: red;">${message}</div>`;
         }
