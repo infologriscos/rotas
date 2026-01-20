@@ -116,9 +116,9 @@
         }
 
         // --- NOVA FUNÇÃO: Liga/Desliga o rastreamento ---
-        function toggleTracking(map, button) {
+function toggleTracking(map, button) {
             if (isTracking) {
-                // Parar rastreamento
+                // --- PARAR RASTREAMENTO ---
                 if (watchId !== null) {
                     navigator.geolocation.clearWatch(watchId);
                     watchId = null;
@@ -126,8 +126,14 @@
                 isTracking = false;
                 button.classList.remove("gps-active");
             } else {
-                // Iniciar rastreamento
-                // Pede permissão e começa a assistir a posição
+                // --- INICIAR RASTREAMENTO ---
+                
+                // Tenta manter a tela ligada (Se a função requestWakeLock existir no seu código)
+                if (typeof requestWakeLock === "function") {
+                    requestWakeLock(); 
+                }
+
+                // Inicia o GPS
                 watchId = navigator.geolocation.watchPosition(
                     (position) => {
                         const pos = {
@@ -135,7 +141,7 @@
                             lng: position.coords.longitude,
                         };
 
-                        // Cria o marcador se não existir (Bolinha Azul)
+                        // Cria ou atualiza o marcador (Bolinha Azul)
                         if (!userMarker) {
                             userMarker = new google.maps.Marker({
                                 position: pos,
@@ -149,10 +155,11 @@
                                     strokeColor: "white",
                                     strokeWeight: 2,
                                 },
-                                zIndex: 9999 // Fica por cima de tudo
+                                zIndex: 9999
                             });
                             
-                            // Círculo de precisão (opcional, visualmente legal)
+                            // Círculo de precisão (Opcional)
+                            // Se quiser remover o círculo azul claro, apague este bloco new google.maps.Circle
                             new google.maps.Circle({
                                 strokeColor: "#4285F4",
                                 strokeOpacity: 0.3,
@@ -161,32 +168,41 @@
                                 fillOpacity: 0.1,
                                 map: map,
                                 center: pos,
-                                radius: position.coords.accuracy, // Precisão em metros
+                                radius: position.coords.accuracy,
                             });
                         } else {
                             userMarker.setPosition(pos);
                         }
 
-                        // Centraliza o mapa na posição do motorista
+                        // Centraliza e ajusta o zoom
                         map.setCenter(pos);
-                        
-                        // Se estiver muito longe (zoom out), aproxima. Se já estiver perto, mantém o zoom do usuário.
                         if (map.getZoom() < 14) {
                             map.setZoom(15);
                         }
 
+                        // Atualiza estado visual do botão
                         isTracking = true;
                         button.classList.add("gps-active");
                     },
                     (error) => {
+                        // --- TRATAMENTO DE ERRO MELHORADO ---
+                        
+                        // Se for erro de Timeout (código 3), é só o GPS demorando para pegar no tranco.
+                        // Ignoramos o alerta visual e deixamos ele continuar tentando.
+                        if (error.code === 3) {
+                            console.warn("GPS Timeout (demora na resposta). Aguardando sinal...");
+                            return; 
+                        }
+
+                        // Se for outro erro (Permissão negada, GPS desligado), aí sim avisamos
                         handleLocationError(true, map.getCenter());
                         button.classList.remove("gps-active");
                         isTracking = false;
                     },
                     {
-                        enableHighAccuracy: true, // Usa GPS real
-                        maximumAge: 0, // Não usa cache
-                        timeout: 10000 // Timeout de 10s
+                        enableHighAccuracy: true, // Prioriza GPS real
+                        maximumAge: 5000,         // Aceita localização de até 5s atrás (ajuda a ligar rápido)
+                        timeout: 30000            // Paciência de 30s antes de considerar erro de conexão
                     }
                 );
             }
