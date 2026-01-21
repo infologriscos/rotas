@@ -23,7 +23,7 @@
         .legend-color-box { width: 18px; height: 18px; margin-right: 8px; border: 3px solid; border-radius: 50%; display: inline-block; background: transparent; }
         #legend h6 { margin-top: 0; margin-bottom: 8px; font-weight: bold; font-size: 13px; }
 
-        /* --- NOVO: Estilo do Botão de GPS --- */
+        /* --- Estilo do Botão de GPS --- */
         .custom-map-control-button {
             background-color: #fff;
             border: 0;
@@ -62,7 +62,7 @@
         let routeWaypoints = [];
         let kmlDocumentGlobal = null;
         
-        // --- NOVAS VARIÁVEIS PARA NAVEGAÇÃO ---
+        // --- VARIÁVEIS PARA NAVEGAÇÃO ---
         let userMarker = null;
         let watchId = null;
         let isTracking = false;
@@ -81,16 +81,16 @@
                 center: { lat: -14.235, lng: -51.925 }, 
                 mapTypeControl: false, 
                 streetViewControl: false,
-                fullscreenControl: false // Remove botão de tela cheia padrão para limpar a tela
+                fullscreenControl: false
             });
 
-            // --- NOVO: Adiciona o botão de localização ---
+            // Adiciona o botão de localização
             addYourLocationButton(map);
 
             loadKml(kmlUrl, map);
         }
 
-        // --- NOVA FUNÇÃO: Cria o botão e a lógica de GPS ---
+        // --- Cria o botão e a lógica de GPS ---
         function addYourLocationButton(map) {
             const controlDiv = document.createElement("div");
             controlDiv.className = "custom-map-control-button";
@@ -99,11 +99,10 @@
             // Ícone de mira (Target)
             controlDiv.innerHTML = `
                 <svg class="gps-icon-svg" viewBox="0 0 24 24">
-                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7-7 7z"/>
                 </svg>
             `;
 
-            // Adiciona o botão ao mapa (Topo à Direita)
             map.controls[google.maps.ControlPosition.RIGHT_TOP].push(controlDiv);
 
             controlDiv.addEventListener("click", () => {
@@ -115,8 +114,8 @@
             });
         }
 
-        // --- NOVA FUNÇÃO: Liga/Desliga o rastreamento ---
-function toggleTracking(map, button) {
+        // --- Liga/Desliga o rastreamento ---
+        function toggleTracking(map, button) {
             if (isTracking) {
                 // --- PARAR RASTREAMENTO ---
                 if (watchId !== null) {
@@ -127,13 +126,10 @@ function toggleTracking(map, button) {
                 button.classList.remove("gps-active");
             } else {
                 // --- INICIAR RASTREAMENTO ---
-                
-                // Tenta manter a tela ligada (Se a função requestWakeLock existir no seu código)
                 if (typeof requestWakeLock === "function") {
                     requestWakeLock(); 
                 }
 
-                // Inicia o GPS
                 watchId = navigator.geolocation.watchPosition(
                     (position) => {
                         const pos = {
@@ -141,7 +137,6 @@ function toggleTracking(map, button) {
                             lng: position.coords.longitude,
                         };
 
-                        // Cria ou atualiza o marcador (Bolinha Azul)
                         if (!userMarker) {
                             userMarker = new google.maps.Marker({
                                 position: pos,
@@ -158,8 +153,6 @@ function toggleTracking(map, button) {
                                 zIndex: 9999
                             });
                             
-                            // Círculo de precisão (Opcional)
-                            // Se quiser remover o círculo azul claro, apague este bloco new google.maps.Circle
                             new google.maps.Circle({
                                 strokeColor: "#4285F4",
                                 strokeOpacity: 0.3,
@@ -174,35 +167,27 @@ function toggleTracking(map, button) {
                             userMarker.setPosition(pos);
                         }
 
-                        // Centraliza e ajusta o zoom
                         map.setCenter(pos);
                         if (map.getZoom() < 14) {
                             map.setZoom(15);
                         }
 
-                        // Atualiza estado visual do botão
                         isTracking = true;
                         button.classList.add("gps-active");
                     },
                     (error) => {
-                        // --- TRATAMENTO DE ERRO MELHORADO ---
-                        
-                        // Se for erro de Timeout (código 3), é só o GPS demorando para pegar no tranco.
-                        // Ignoramos o alerta visual e deixamos ele continuar tentando.
                         if (error.code === 3) {
-                            console.warn("GPS Timeout (demora na resposta). Aguardando sinal...");
+                            console.warn("GPS Timeout. Aguardando sinal...");
                             return; 
                         }
-
-                        // Se for outro erro (Permissão negada, GPS desligado), aí sim avisamos
                         handleLocationError(true, map.getCenter());
                         button.classList.remove("gps-active");
                         isTracking = false;
                     },
                     {
-                        enableHighAccuracy: true, // Prioriza GPS real
-                        maximumAge: 5000,         // Aceita localização de até 5s atrás (ajuda a ligar rápido)
-                        timeout: 30000            // Paciência de 30s antes de considerar erro de conexão
+                        enableHighAccuracy: true,
+                        maximumAge: 5000,
+                        timeout: 30000
                     }
                 );
             }
@@ -215,8 +200,6 @@ function toggleTracking(map, button) {
                     : "Erro: Seu navegador não suporta geolocalização."
             );
         }
-
-        // --- FIM DAS FUNÇÕES NOVAS ---
 
         function loadKml(kmlUrl, map) {
             const loadingDiv = document.getElementById('loading');
@@ -428,55 +411,77 @@ function toggleTracking(map, button) {
             document.getElementById('info-panel').classList.remove('hidden');
         }
 
+        // --- FUNÇÃO ATUALIZADA: Conta os pontos e exibe na legenda ---
         function createLegend(kmlDoc) {
             const legendDiv = document.getElementById('legend');
             let legendHTML = '<h6>Legenda</h6>'; 
-            const legendItems = {};
+            const legendItems = {}; // Armazena por Nome da Pasta
             let hasItems = false;
             const styles = extractStyles(kmlDoc);
             const kmlFolders = kmlDoc.querySelectorAll('Document > Folder');
 
             kmlFolders.forEach(folder => {
                 const folderName = folder.querySelector('name')?.textContent || 'Outros';
+                
+                // Filtra pastas de navegação/estruturais
                 if (folderName === 'Trajeto' || folderName === 'Origem' || folderName === 'Destino') return;
-                let iconUrl = null;
-                let isGeometry = false;
-                let geometryColor = 'gray';
 
-                const placemarkPoint = folder.querySelector('Placemark > Point');
-                if (placemarkPoint) {
-                    const pm = placemarkPoint.closest('Placemark');
-                    const styleUrl = pm.querySelector('styleUrl')?.textContent;
-                    if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
-                        iconUrl = styles[styleUrl].iconHref;
-                    } else {
-                        iconUrl = 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'; 
-                    }
-                } else {
-                    const placemarkPoly = folder.querySelector('Placemark > Polygon') || folder.querySelector('Placemark > LineString');
-                    if (placemarkPoly) {
-                        isGeometry = true;
-                        if (folderName === 'Áreas de Risco') geometryColor = 'red';
-                        else if (folderName === 'Áreas de Jammer' || folderName === 'Presídios') geometryColor = 'gray';
-                        else if (folderName === 'Trajeto') geometryColor = 'blue';
-                        else geometryColor = 'black';
-                    }
+                // Inicializa o objeto para esta pasta se ainda não existir
+                if (!legendItems[folderName]) {
+                    legendItems[folderName] = { icon: null, isGeometry: false, color: 'gray', count: 0 };
                 }
-                if (iconUrl || isGeometry) {
-                    legendItems[folderName] = { icon: iconUrl, isGeometry: isGeometry, color: geometryColor };
-                    hasItems = true;
-                }
+
+                // Conta quantos placemarks válidos existem nesta pasta
+                const placemarks = folder.querySelectorAll('Placemark');
+                
+                placemarks.forEach(pm => {
+                    // Verifica se é um objeto de mapa válido
+                    const isPoint = pm.querySelector('Point');
+                    const isPoly = pm.querySelector('Polygon');
+                    const isLine = pm.querySelector('LineString');
+
+                    if (isPoint || isPoly || isLine) {
+                        legendItems[folderName].count++; // Incrementa contagem
+                        hasItems = true;
+
+                        // Tenta capturar o ícone ou estilo (prioriza o primeiro encontrado na pasta)
+                        if (!legendItems[folderName].icon && !legendItems[folderName].isGeometry) {
+                            if (isPoint) {
+                                const styleUrl = pm.querySelector('styleUrl')?.textContent;
+                                if (styleUrl && styles[styleUrl] && styles[styleUrl].iconHref) {
+                                    legendItems[folderName].icon = styles[styleUrl].iconHref;
+                                } else {
+                                    // Ícone padrão fallback
+                                    legendItems[folderName].icon = 'http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png';
+                                }
+                            } else {
+                                // É geometria
+                                legendItems[folderName].isGeometry = true;
+                                if (folderName === 'Áreas de Risco') legendItems[folderName].color = 'red';
+                                else if (folderName === 'Áreas de Jammer' || folderName === 'Presídios') legendItems[folderName].color = 'gray';
+                                else if (folderName === 'Trajeto') legendItems[folderName].color = 'blue';
+                                else legendItems[folderName].color = 'black';
+                            }
+                        }
+                    }
+                });
             });
 
+            // Gera o HTML da legenda com a contagem
             for (const [name, data] of Object.entries(legendItems)) {
+                if (data.count === 0) continue; // Pula se não tiver itens
+
                 let iconHTML = '';
                 if (data.isGeometry) {
                     iconHTML = `<span class="legend-color-box" style="border-color: ${data.color};"></span>`;
                 } else {
-                    iconHTML = `<img src="${data.icon}" class="legend-icon" alt="${name}">`;
+                    const imgUrl = data.icon || 'http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png';
+                    iconHTML = `<img src="${imgUrl}" class="legend-icon" alt="${name}">`;
                 }
-                legendHTML += `<div class="legend-item">${iconHTML}<span>${name}</span></div>`;
+                // Adiciona a contagem ao lado do nome
+                legendHTML += `<div class="legend-item">${iconHTML}<span>${name} (${data.count})</span></div>`;
             }
+
             if (hasItems) {
                 legendDiv.innerHTML = legendHTML;
                 legendDiv.classList.remove('hidden');
